@@ -108,6 +108,62 @@ try {
             ]);
             break;
             
+        case 'check_database':
+            // データベース状況確認
+            $all_posts = get_posts([
+                'post_type' => 'grant',
+                'posts_per_page' => -1,
+                'post_status' => 'any'
+            ]);
+            
+            $published_posts = get_posts([
+                'post_type' => 'grant',
+                'posts_per_page' => -1,
+                'post_status' => 'publish'
+            ]);
+            
+            echo json_encode([
+                'success' => true,
+                'data' => [
+                    'total_posts' => count($all_posts),
+                    'published_posts' => count($published_posts),
+                    'sample_posts' => array_slice(array_map(function($post) {
+                        return [
+                            'id' => $post->ID,
+                            'title' => $post->post_title,
+                            'status' => $post->post_status
+                        ];
+                    }, $all_posts), 0, 10),
+                    'wordpress_loaded' => defined('ABSPATH'),
+                    'post_type_exists' => post_type_exists('grant')
+                ]
+            ]);
+            break;
+            
+        case 'force_create_data':
+            // サンプルデータ強制作成
+            if (function_exists('gi_insert_sample_grants_with_prefectures')) {
+                gi_insert_sample_grants_with_prefectures();
+                
+                $new_posts = get_posts([
+                    'post_type' => 'grant',
+                    'posts_per_page' => -1,
+                    'post_status' => 'publish'
+                ]);
+                
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Sample data created via independent handler',
+                    'created_count' => count($new_posts)
+                ]);
+            } else {
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Sample data creation function not found'
+                ]);
+            }
+            break;
+            
         case 'get_filters':
             // フィルターオプション取得
             $categories = get_terms(['taxonomy' => 'grant_category', 'hide_empty' => false]);

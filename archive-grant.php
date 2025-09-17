@@ -30,8 +30,14 @@
     
     <!-- テストボタン -->
     <div class="test-section" style="text-align: center; margin-bottom: 20px;">
-        <button onclick="simpleSearch.test()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
-            テスト検索実行
+        <button onclick="checkDatabase()" style="padding: 8px 16px; background: #6f42c1; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            DB状況確認
+        </button>
+        <button onclick="forceCreateData()" style="padding: 8px 16px; background: #fd7e14; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">
+            サンプルデータ作成
+        </button>
+        <button onclick="simpleSearch.test()" style="padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">
+            テスト検索
         </button>
         <button onclick="testConnection()" style="padding: 8px 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">
             接続テスト
@@ -48,6 +54,81 @@
 </div>
 
 <script>
+// データベース状況確認関数
+async function checkDatabase() {
+    console.log('📄 データベース状況確認開始');
+    
+    try {
+        const response = await fetch(window.location.origin + '/ajax-handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=check_database'
+        });
+        
+        const data = await response.json();
+        console.log('📄 データベース状況:', data);
+        
+        if (data.success) {
+            const info = data.data;
+            console.log(`📊 結果:`);
+            console.log(`- 全投稿数: ${info.total_posts}`);
+            console.log(`- 公開済み: ${info.published_posts}`);
+            console.log(`- WordPress読み込み: ${info.wordpress_loaded}`);
+            console.log(`- grantポストタイプ存在: ${info.post_type_exists}`);
+            
+            if (info.sample_posts.length > 0) {
+                console.log(`📝 サンプル投稿:`);
+                info.sample_posts.forEach(post => {
+                    console.log(`  - ${post.title} (ID: ${post.id}, Status: ${post.status})`);
+                });
+            }
+            
+            alert(`データベース状況:\n全投稿: ${info.total_posts}件\n公開済み: ${info.published_posts}件`);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('📄 データベースチェックエラー:', error);
+        alert('データベースチェックエラー: ' + error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+// サンプルデータ強制作成関数
+async function forceCreateData() {
+    console.log('🚀 サンプルデータ強制作成開始');
+    
+    const confirmCreate = confirm('サンプルデータを作成しますか？\n（既存のデータは削除されます）');
+    if (!confirmCreate) return;
+    
+    try {
+        const response = await fetch(window.location.origin + '/ajax-handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'action=force_create_data'
+        });
+        
+        const data = await response.json();
+        console.log('🚀 サンプルデータ作成結果:', data);
+        
+        if (data.success) {
+            alert(`サンプルデータ作成完了!\n作成数: ${data.created_count}件`);
+            // データ作成後に検索テストを実行
+            setTimeout(() => {
+                simpleSearch.test();
+            }, 1000);
+        } else {
+            alert('サンプルデータ作成失敗: ' + data.message);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('🚀 サンプルデータ作成エラー:', error);
+        alert('サンプルデータ作成エラー: ' + error.message);
+        return { success: false, error: error.message };
+    }
+}
+
 // 接続テスト関数
 async function testConnection() {
     console.log('🔧 接続テスト開始');

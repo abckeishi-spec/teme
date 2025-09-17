@@ -1327,6 +1327,101 @@ add_action('wp_ajax_gi_simple_search', 'gi_simple_search_ajax');
 add_action('wp_ajax_nopriv_gi_simple_search', 'gi_simple_search_ajax');
 
 /**
+ * データベース確認用AJAX関数
+ */
+function gi_check_database_status() {
+    error_log('[DB_CHECK] Database check called');
+    
+    try {
+        // 全ての助成金投稿を確認
+        $all_grants = get_posts(array(
+            'post_type' => 'grant',
+            'posts_per_page' => -1,
+            'post_status' => 'any'
+        ));
+        
+        $published_grants = get_posts(array(
+            'post_type' => 'grant',
+            'posts_per_page' => -1,
+            'post_status' => 'publish'
+        ));
+        
+        // タクソノミーの確認
+        $categories = get_terms(array('taxonomy' => 'grant_category', 'hide_empty' => false));
+        $prefectures = get_terms(array('taxonomy' => 'grant_prefecture', 'hide_empty' => false));
+        $industries = get_terms(array('taxonomy' => 'grant_industry', 'hide_empty' => false));
+        
+        wp_send_json_success(array(
+            'total_grants' => count($all_grants),
+            'published_grants' => count($published_grants),
+            'categories_count' => count($categories),
+            'prefectures_count' => count($prefectures),
+            'industries_count' => count($industries),
+            'sample_grants' => array_slice(array_map(function($post) {
+                return array(
+                    'id' => $post->ID,
+                    'title' => $post->post_title,
+                    'status' => $post->post_status
+                );
+            }, $all_grants), 0, 5)
+        ));
+        
+    } catch (Exception $e) {
+        error_log('[DB_CHECK] Exception: ' . $e->getMessage());
+        wp_send_json_error('Database check error: ' . $e->getMessage());
+    }
+}
+add_action('wp_ajax_gi_check_db', 'gi_check_database_status');
+add_action('wp_ajax_nopriv_gi_check_db', 'gi_check_database_status');
+
+/**
+ * サンプルデータ強制作成用AJAX関数
+ */
+function gi_force_create_sample_data() {
+    error_log('[FORCE_CREATE] Force create sample data called');
+    
+    try {
+        // 既存のサンプルデータを削除
+        $existing_grants = get_posts(array(
+            'post_type' => 'grant',
+            'posts_per_page' => -1,
+            'post_status' => 'any'
+        ));
+        
+        foreach ($existing_grants as $grant) {
+            wp_delete_post($grant->ID, true);
+        }
+        
+        // サンプルデータを強制作成
+        gi_insert_sample_grants_with_prefectures();
+        
+        // 作成後の確認
+        $new_grants = get_posts(array(
+            'post_type' => 'grant',
+            'posts_per_page' => -1,
+            'post_status' => 'publish'
+        ));
+        
+        wp_send_json_success(array(
+            'message' => 'Sample data created successfully',
+            'created_grants' => count($new_grants),
+            'grants' => array_map(function($post) {
+                return array(
+                    'id' => $post->ID,
+                    'title' => $post->post_title
+                );
+            }, $new_grants)
+        ));
+        
+    } catch (Exception $e) {
+        error_log('[FORCE_CREATE] Exception: ' . $e->getMessage());
+        wp_send_json_error('Force create error: ' . $e->getMessage());
+    }
+}
+add_action('wp_ajax_gi_force_create_data', 'gi_force_create_sample_data');
+add_action('wp_ajax_nopriv_gi_force_create_data', 'gi_force_create_sample_data');
+
+/**
  * 緊急用超シンプルAJAX - すべてのチェックをバイパス
  */
 function gi_emergency_ajax_test() {
