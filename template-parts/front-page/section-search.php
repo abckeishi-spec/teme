@@ -1322,25 +1322,28 @@ document.addEventListener('DOMContentLoaded', function() {
             
             try {
                 // AJAX検索実行
+                // WordPress標準のFormData形式に統一
+                const formData = new FormData();
+                formData.append('action', 'gi_ajax_load_grants');
+                formData.append('nonce', '<?php echo $search_nonce; ?>');
+                formData.append('search', searchParams.search);
+                formData.append('categories', JSON.stringify(searchParams.categories));
+                formData.append('prefectures', JSON.stringify(searchParams.prefectures));
+                formData.append('amount', searchParams.amount);
+                formData.append('status', JSON.stringify(searchParams.status));
+                formData.append('difficulty', JSON.stringify(searchParams.difficulty));
+                formData.append('success_rate', JSON.stringify(searchParams.success_rate));
+                formData.append('sort', searchParams.sort);
+                formData.append('view', searchParams.view);
+                formData.append('page', searchParams.page);
+
                 const response = await fetch(window.giSearchConfig.ajaxUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: new URLSearchParams({
-                        action: 'gi_ajax_load_grants',
-                        nonce: '<?php echo $search_nonce; ?>',
-                        search: searchParams.search,
-                        categories: JSON.stringify(searchParams.categories),
-                        prefectures: JSON.stringify(searchParams.prefectures),
-                        amount: searchParams.amount,
-                        status: JSON.stringify(searchParams.status),
-                        difficulty: JSON.stringify(searchParams.difficulty),
-                        success_rate: JSON.stringify(searchParams.success_rate),
-                        sort: searchParams.sort,
-                        view: searchParams.view,
-                        page: searchParams.page
-                    })
+                    body: formData,
+                    credentials: 'same-origin'
                 });
                 
                 const data = await response.json();

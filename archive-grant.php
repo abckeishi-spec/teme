@@ -769,9 +769,16 @@ get_header();
 <!-- JavaScript -->
 <script>
 // グローバル設定
+<?php
+$ajax_url = admin_url('admin-ajax.php');
+$nonce_value = wp_create_nonce('gi_ajax_nonce');
+if (empty($ajax_url)) {
+    $ajax_url = home_url('/wp-admin/admin-ajax.php');
+}
+?>
 window.giSearchConfig = {
-    ajaxUrl: '<?php echo admin_url('admin-ajax.php'); ?>',
-    nonce: '<?php echo wp_create_nonce('gi_ajax_nonce'); ?>',
+    ajaxUrl: '<?php echo esc_url($ajax_url); ?>',
+    nonce: '<?php echo $nonce_value; ?>',
     isUserLoggedIn: <?php echo is_user_logged_in() ? 'true' : 'false'; ?>,
     userId: <?php echo get_current_user_id(); ?>,
     currentUrl: '<?php echo esc_url(get_permalink()); ?>',
@@ -780,6 +787,14 @@ window.giSearchConfig = {
 
 // デバッグ情報出力
 console.log('[GI_DEBUG] Global config loaded:', window.giSearchConfig);
+console.log('[GI_DEBUG] AJAX URL validation:', window.giSearchConfig.ajaxUrl);
+
+// AJAX URLの有効性チェック
+if (!window.giSearchConfig.ajaxUrl || !window.giSearchConfig.ajaxUrl.includes('admin-ajax.php')) {
+    console.error('[GI_DEBUG] Invalid AJAX URL detected:', window.giSearchConfig.ajaxUrl);
+} else {
+    console.log('[GI_DEBUG] AJAX URL is valid');
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     'use strict';
@@ -1071,11 +1086,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const response = await fetch(window.giSearchConfig.ajaxUrl, {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData,
+                    credentials: 'same-origin'
                 });
 
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.error('[GI_DEBUG] Archive HTTP Error Details:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        url: response.url,
+                        headers: Object.fromEntries(response.headers.entries())
+                    });
+                    
+                    try {
+                        const errorText = await response.text();
+                        console.error('[GI_DEBUG] Archive error response body:', errorText);
+                    } catch (e) {
+                        console.error('[GI_DEBUG] Could not read archive error response body');
+                    }
+                    
+                    throw new Error(`HTTP error! status: ${response.status} (${response.statusText})`);
                 }
 
                 const data = await response.json();
@@ -1390,7 +1423,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 const response = await fetch(window.giSearchConfig.ajaxUrl, {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: formData,
+                    credentials: 'same-origin'
                 });
 
                 const data = await response.json();

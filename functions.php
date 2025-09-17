@@ -845,7 +845,11 @@ function gi_ajax_load_grants() {
     // デバッグ情報の出力 (本番では削除)
     error_log('[GI_DEBUG] AJAX gi_ajax_load_grants called');
     error_log('[GI_DEBUG] Request method: ' . $_SERVER['REQUEST_METHOD']);
+    error_log('[GI_DEBUG] Content type: ' . ($_SERVER['CONTENT_TYPE'] ?? 'not set'));
+    $headers = function_exists('getallheaders') ? getallheaders() : $_SERVER;
+    error_log('[GI_DEBUG] HTTP headers: ' . print_r($headers, true));
     error_log('[GI_DEBUG] POST data: ' . print_r($_POST, true));
+    error_log('[GI_DEBUG] Raw input: ' . file_get_contents('php://input'));
     
     // POSTリクエストの確認
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

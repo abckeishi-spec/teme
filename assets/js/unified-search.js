@@ -427,15 +427,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
 
+                // WordPress AJAXリクエストの正しい形式
                 const response = await fetch(this.config.ajaxUrl, {
                     method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                        // Content-TypeはFormData使用時は自動設定されるため明示的に設定しない
+                    },
                     body: formData,
+                    credentials: 'same-origin',
                     signal: this.state.requestController.signal
                 });
 
                 if (!response.ok) {
-                    console.error('[GI_DEBUG] HTTP Error:', response.status, response.statusText);
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.error('[GI_DEBUG] HTTP Error Details:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        url: response.url,
+                        headers: Object.fromEntries(response.headers.entries())
+                    });
+                    
+                    // レスポンスボディの読み取り試行
+                    try {
+                        const errorText = await response.text();
+                        console.error('[GI_DEBUG] Error response body:', errorText);
+                    } catch (e) {
+                        console.error('[GI_DEBUG] Could not read error response body');
+                    }
+                    
+                    throw new Error(`HTTP error! status: ${response.status} (${response.statusText})`);
                 }
 
                 const data = await response.json();
