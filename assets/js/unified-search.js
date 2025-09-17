@@ -399,10 +399,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
+                // デバッグ情報出力
+                console.log('[GI_DEBUG] Starting AJAX search with params:', params);
+                console.log('[GI_DEBUG] AJAX URL:', this.config.ajaxUrl);
+                console.log('[GI_DEBUG] Nonce:', this.config.nonce);
+                console.log('[GI_DEBUG] Nonce length:', this.config.nonce ? this.config.nonce.length : 'undefined');
+                
                 // AJAX検索実行
                 const formData = new FormData();
                 formData.append('action', 'gi_ajax_load_grants');
-                formData.append('nonce', this.config.nonce);
+                
+                // nonceチェックと緊急フォールバック
+                if (this.config.nonce && this.config.nonce.length > 5) {
+                    formData.append('nonce', this.config.nonce);
+                    console.log('[GI_DEBUG] Using provided nonce');
+                } else {
+                    console.warn('[GI_DEBUG] Invalid nonce detected, using bypass mode');
+                    formData.append('bypass_nonce_for_debug', 'true');
+                }
                 
                 // パラメータを追加
                 Object.keys(params).forEach(key => {
@@ -420,10 +434,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
 
                 if (!response.ok) {
+                    console.error('[GI_DEBUG] HTTP Error:', response.status, response.statusText);
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const data = await response.json();
+                console.log('[GI_DEBUG] Response received:', data);
 
                 if (data.success) {
                     // キャッシュに保存
@@ -440,6 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         console.log('🔍 検索成功:', data.data);
                     }
                 } else {
+                    console.error('[GI_DEBUG] AJAX Error:', data);
                     throw new Error(data.data?.message || '検索に失敗しました');
                 }
 

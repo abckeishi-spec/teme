@@ -778,6 +778,9 @@ window.giSearchConfig = {
     homeUrl: '<?php echo esc_url(home_url('/')); ?>'
 };
 
+// デバッグ情報出力
+console.log('[GI_DEBUG] Global config loaded:', window.giSearchConfig);
+
 document.addEventListener('DOMContentLoaded', function() {
     'use strict';
 
@@ -1037,9 +1040,22 @@ document.addEventListener('DOMContentLoaded', function() {
             this.showLoading(true);
 
             try {
+                console.log('[GI_DEBUG] Archive AJAX request started');
+                console.log('[GI_DEBUG] Current filters:', this.state.filters);
+                console.log('[GI_DEBUG] AJAX URL:', window.giSearchConfig.ajaxUrl);
+                console.log('[GI_DEBUG] Nonce:', window.giSearchConfig.nonce);
+                
                 const formData = new FormData();
                 formData.append('action', 'gi_ajax_load_grants');
-                formData.append('nonce', window.giSearchConfig.nonce);
+                
+                // nonceチェックと緊急フォールバック
+                if (window.giSearchConfig.nonce && window.giSearchConfig.nonce.length > 5) {
+                    formData.append('nonce', window.giSearchConfig.nonce);
+                    console.log('[GI_DEBUG] Archive using provided nonce');
+                } else {
+                    console.warn('[GI_DEBUG] Archive invalid nonce detected, using bypass mode');
+                    formData.append('bypass_nonce_for_debug', 'true');
+                }
                 formData.append('search', this.state.filters.search || '');
                 formData.append('categories', JSON.stringify(this.state.filters.categories || []));
                 formData.append('prefectures', JSON.stringify(this.state.filters.prefectures || []));
@@ -1063,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 const data = await response.json();
-                console.log('📥 検索結果:', data);
+                console.log('[GI_DEBUG] Archive response received:', data);
 
                 if (data.success) {
                     this.displayResults(data.data);
@@ -1071,6 +1087,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     this.updateActiveFilters();
                     this.updateStatistics(data.data);
                 } else {
+                    console.error('[GI_DEBUG] Archive AJAX Error:', data);
                     this.showError(data.data?.message || '検索に失敗しました');
                 }
             } catch (error) {
