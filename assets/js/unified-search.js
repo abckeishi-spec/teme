@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('🔌 独立エンドポイント接続テスト開始');
             
             try {
-                const response = await fetch('./ajax-handler.php', {
+                const response = await fetch('window.location.origin + '/ajax-handler.php'', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('🔍 独立検索テスト開始');
             
             try {
-                const response = await fetch('./ajax-handler.php', {
+                const response = await fetch('window.location.origin + '/ajax-handler.php'', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 formData.append('search', params.search || '');
                 formData.append('page', params.page || 1);
                 
-                const response = await fetch('./ajax-handler.php', {
+                const response = await fetch('window.location.origin + '/ajax-handler.php'', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'

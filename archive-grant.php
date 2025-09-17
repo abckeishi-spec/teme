@@ -820,12 +820,49 @@ window.runIndependentTest = async function() {
     }
 };
 
+// HTTPS対応テスト関数
+window.testHttpsSearch = async function(query = '助成金') {
+    console.log('🔒 HTTPS対応検索テスト:', query);
+    
+    const httpsUrl = window.location.origin + '/ajax-handler.php';
+    console.log('🔒 使用URL:', httpsUrl);
+    
+    try {
+        const response = await fetch(httpsUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=search_grants&search=${encodeURIComponent(query)}`
+        });
+        
+        console.log('🔒 Response status:', response.status);
+        console.log('🔒 Response headers:', Object.fromEntries(response.headers.entries()));
+        
+        const data = await response.json();
+        console.log('🔒 HTTPS検索結果:', data);
+        
+        if (data.success && data.data.grants.length > 0) {
+            console.log(`✅ HTTPS検索成功: ${data.data.total}件の助成金が見つかりました`);
+            data.data.grants.forEach((grant, index) => {
+                console.log(`${index + 1}. ${grant.title} (ID: ${grant.id})`);
+            });
+        } else {
+            console.warn('⚠️ 検索結果が空またはエラー');
+        }
+        
+        return data;
+        
+    } catch (error) {
+        console.error('🔒 HTTPS検索エラー:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 // シンプルな検索テスト
 window.testSimpleSearch = async function(query = '助成金') {
     console.log('🔍 シンプル検索テスト:', query);
     
     try {
-        const response = await fetch('./ajax-handler.php', {
+        const response = await fetch('window.location.origin + '/ajax-handler.php'', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `action=search_grants&search=${encodeURIComponent(query)}`
