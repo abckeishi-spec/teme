@@ -1249,7 +1249,8 @@ add_action('wp_ajax_gi_test_ajax', 'gi_ajax_test_function');
 add_action('wp_ajax_nopriv_gi_test_ajax', 'gi_ajax_test_function');
 
 /**
- * シンプルなAJAX関数 - セキュリティチェックなし
+ * 緊急用シンプルAJAX関数 - セキュリティチェックなし
+ * こちらを使って基本動作を確認
  */
 function gi_simple_grants_loader() {
     error_log('[GI_DEBUG] Simple grants loader called (no security check)');
@@ -1290,6 +1291,81 @@ function gi_simple_grants_loader() {
 }
 add_action('wp_ajax_gi_simple_load', 'gi_simple_grants_loader');
 add_action('wp_ajax_nopriv_gi_simple_load', 'gi_simple_grants_loader');
+
+/**
+ * 緊急用超シンプルAJAX - すべてのチェックをバイパス
+ */
+function gi_emergency_ajax_test() {
+    // ステータス200でシンプルなJSONを返す
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => true,
+        'message' => '緊急AJAXテスト成功',
+        'timestamp' => time(),
+        'data' => [
+            'test' => 'OK',
+            'server_working' => true
+        ]
+    ]);
+    wp_die();
+}
+add_action('wp_ajax_gi_emergency_test', 'gi_emergency_ajax_test');
+add_action('wp_ajax_nopriv_gi_emergency_test', 'gi_emergency_ajax_test');
+
+/**
+ * 緊急用検索AJAX - セキュリティチェック最小限
+ */
+function gi_emergency_search() {
+    // 最小限のチェックのみ
+    if (!defined('DOING_AJAX') || !DOING_AJAX) {
+        wp_die('Not an AJAX request');
+    }
+    
+    try {
+        // 最もシンプルなグラントクエリ
+        $args = [
+            'post_type' => 'grant',
+            'posts_per_page' => 3,
+            'post_status' => 'publish'
+        ];
+        
+        $query = new WP_Query($args);
+        $grants = [];
+        
+        if ($query->have_posts()) {
+            while ($query->have_posts()) {
+                $query->the_post();
+                $grants[] = [
+                    'id' => get_the_ID(),
+                    'title' => get_the_title(),
+                    'excerpt' => get_the_excerpt()
+                ];
+            }
+            wp_reset_postdata();
+        }
+        
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => true,
+            'message' => '緊急検索成功',
+            'data' => [
+                'grants' => $grants,
+                'total' => $query->found_posts
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Emergency search error: ' . $e->getMessage()
+        ]);
+    }
+    
+    wp_die();
+}
+add_action('wp_ajax_gi_emergency_search', 'gi_emergency_search');
+add_action('wp_ajax_nopriv_gi_emergency_search', 'gi_emergency_search');
 
 /**
  * 代替セキュリティシステム - nonceに依存しない方法

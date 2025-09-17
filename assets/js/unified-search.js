@@ -17,6 +17,63 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
+    // 緊急テスト機能
+    window.giEmergencyTest = {
+        async testBasicAjax() {
+            console.log('🚨 緊急AJAX接続テスト開始');
+            
+            try {
+                const response = await fetch('/wp-admin/admin-ajax.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=gi_emergency_test'
+                });
+                
+                console.log('🚨 Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('🚨 緊急テスト成功:', data);
+                return data;
+                
+            } catch (error) {
+                console.error('🚨 緊急テスト失敗:', error);
+                return { success: false, error: error.message };
+            }
+        },
+        
+        async testEmergencySearch() {
+            console.log('🚨 緊急検索テスト開始');
+            
+            try {
+                const response = await fetch('/wp-admin/admin-ajax.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=gi_emergency_search'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('🚨 緊急検索成功:', data);
+                return data;
+                
+            } catch (error) {
+                console.error('🚨 緊急検索失敗:', error);
+                return { success: false, error: error.message };
+            }
+        }
+    };
+    
     // 統合検索システムメインクラス
     const GISearchManager = {
         // 設定
@@ -108,6 +165,64 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         },
 
+        /**
+         * 緊急フォールバック検索
+         */
+        async emergencyFallbackSearch(params = {}) {
+            console.log('🚨 緊急フォールバック検索開始');
+            
+            try {
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=gi_emergency_search'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Emergency fallback HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    console.log('🚨 緊急フォールバック成功:', data.data);
+                    this.displayEmergencyResults(data.data);
+                } else {
+                    throw new Error(data.message || '緊急フォールバックエラー');
+                }
+                
+            } catch (error) {
+                console.error('🚨 緊急フォールバック失敗:', error);
+                this.showError('緊急モード: ' + error.message);
+            }
+        },
+        
+        /**
+         * 緊急結果表示
+         */
+        displayEmergencyResults(data) {
+            const container = this.elements.grantsContainer || document.getElementById('grants-display');
+            if (!container) return;
+            
+            let html = `<div class="emergency-results" style="border: 2px solid #ff6b6b; padding: 20px; margin: 20px 0; background: #fff5f5;">
+                <h3 style="color: #e03131;">🚨 緊急モードで表示中</h3>
+                <p>検索結果: ${data.total}件の助成金が見つかりました</p>
+                <div class="grants-list">`;
+            
+            data.grants.forEach(grant => {
+                html += `<div class="grant-item emergency-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; background: white;">
+                    <h4 style="margin: 0 0 10px 0;">${grant.title}</h4>
+                    <p style="margin: 5px 0;">${grant.excerpt}</p>
+                    <small style="color: #666;">ID: ${grant.id}</small>
+                </div>`;
+            });
+            
+            html += '</div></div>';
+            container.innerHTML = html;
+        },
+        
         /**
          * イベントバインディング
          */

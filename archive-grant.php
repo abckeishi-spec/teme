@@ -770,19 +770,38 @@ get_header();
 <script>
 // グローバル設定
 <?php
-$ajax_url = admin_url('admin-ajax.php');
+// AJAX URLの確実な取得
+$site_url = get_site_url();
+$ajax_url = $site_url . '/wp-admin/admin-ajax.php';
 $nonce_value = wp_create_nonce('gi_ajax_nonce');
-if (empty($ajax_url)) {
-    $ajax_url = home_url('/wp-admin/admin-ajax.php');
-}
+
+// デバッグ情報
+error_log('[GI_DEBUG] Site URL: ' . $site_url);
+error_log('[GI_DEBUG] AJAX URL: ' . $ajax_url);
+error_log('[GI_DEBUG] Nonce: ' . $nonce_value);
 ?>
 window.giSearchConfig = {
-    ajaxUrl: '<?php echo esc_url($ajax_url); ?>',
+    ajaxUrl: '<?php echo $ajax_url; ?>',
     nonce: '<?php echo $nonce_value; ?>',
     isUserLoggedIn: <?php echo is_user_logged_in() ? 'true' : 'false'; ?>,
     userId: <?php echo get_current_user_id(); ?>,
     currentUrl: '<?php echo esc_url(get_permalink()); ?>',
-    homeUrl: '<?php echo esc_url(home_url('/')); ?>'
+    homeUrl: '<?php echo esc_url(home_url('/')); ?>',
+    siteUrl: '<?php echo $site_url; ?>'
+};
+
+// 緊急テスト用関数
+window.runEmergencyTest = async function() {
+    console.log('🚨 緊急テスト実行中...');
+    
+    if (window.giEmergencyTest) {
+        const result1 = await window.giEmergencyTest.testBasicAjax();
+        const result2 = await window.giEmergencyTest.testEmergencySearch();
+        
+        console.log('🚨 テスト結果:');
+        console.log('Basic AJAX:', result1);
+        console.log('Emergency Search:', result2);
+    }
 };
 
 // デバッグ情報出力
