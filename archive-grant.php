@@ -804,6 +804,51 @@ window.runEmergencyTest = async function() {
     }
 };
 
+// 独立エンドポイントテスト用関数
+window.runIndependentTest = async function() {
+    console.log('🔌 独立エンドポイントテスト実行中...');
+    
+    if (window.giIndependentTest) {
+        const result1 = await window.giIndependentTest.testConnection();
+        const result2 = await window.giIndependentTest.testSearch('');
+        
+        console.log('🔌 テスト結果:');
+        console.log('Independent Connection:', result1);
+        console.log('Independent Search:', result2);
+        
+        return { connection: result1, search: result2 };
+    }
+};
+
+// シンプルな検索テスト
+window.testSimpleSearch = async function(query = '助成金') {
+    console.log('🔍 シンプル検索テスト:', query);
+    
+    try {
+        const response = await fetch('./ajax-handler.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=search_grants&search=${encodeURIComponent(query)}`
+        });
+        
+        const data = await response.json();
+        console.log('🔍 検索結果:', data);
+        
+        if (data.success && data.data.grants.length > 0) {
+            console.log(`✅ 検索成功: ${data.data.total}件の助成金が見つかりました`);
+            data.data.grants.forEach((grant, index) => {
+                console.log(`${index + 1}. ${grant.title} (ID: ${grant.id})`);
+            });
+        }
+        
+        return data;
+        
+    } catch (error) {
+        console.error('🔍 検索エラー:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 // デバッグ情報出力
 console.log('[GI_DEBUG] Global config loaded:', window.giSearchConfig);
 console.log('[GI_DEBUG] AJAX URL validation:', window.giSearchConfig.ajaxUrl);

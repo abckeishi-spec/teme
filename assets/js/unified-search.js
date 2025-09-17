@@ -17,6 +17,63 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
     }
 
+    // 独立エンドポイントテスト機能
+    window.giIndependentTest = {
+        async testConnection() {
+            console.log('🔌 独立エンドポイント接続テスト開始');
+            
+            try {
+                const response = await fetch('./ajax-handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=test_connection'
+                });
+                
+                console.log('🔌 Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('🔌 独立エンドポイントテスト成功:', data);
+                return data;
+                
+            } catch (error) {
+                console.error('🔌 独立エンドポイントテスト失敗:', error);
+                return { success: false, error: error.message };
+            }
+        },
+        
+        async testSearch(query = '') {
+            console.log('🔍 独立検索テスト開始');
+            
+            try {
+                const response = await fetch('./ajax-handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: `action=search_grants&search=${encodeURIComponent(query)}&page=1`
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('🔍 独立検索成功:', data);
+                return data;
+                
+            } catch (error) {
+                console.error('🔍 独立検索失敗:', error);
+                return { success: false, error: error.message };
+            }
+        }
+    };
+    
     // 緊急テスト機能
     window.giEmergencyTest = {
         async testBasicAjax() {
@@ -165,6 +222,79 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         },
 
+        /**
+         * 独立エンドポイントでの検索
+         */
+        async independentSearch(params = {}) {
+            console.log('🔌 独立エンドポイント検索開始');
+            
+            try {
+                const formData = new URLSearchParams();
+                formData.append('action', 'search_grants');
+                formData.append('search', params.search || '');
+                formData.append('page', params.page || 1);
+                
+                const response = await fetch('./ajax-handler.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Independent search HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.data) {
+                    console.log('🔌 独立検索成功:', data.data);
+                    this.displayIndependentResults(data.data);
+                } else {
+                    throw new Error(data.message || '独立検索エラー');
+                }
+                
+            } catch (error) {
+                console.error('🔌 独立検索失敗:', error);
+                this.showError('独立モード: ' + error.message);
+            }
+        },
+        
+        /**
+         * 独立結果表示
+         */
+        displayIndependentResults(data) {
+            const container = this.elements.grantsContainer || document.getElementById('grants-display');
+            if (!container) return;
+            
+            let html = `<div class="independent-results" style="border: 2px solid #4dabf7; padding: 20px; margin: 20px 0; background: #f8f9ff;">
+                <h3 style="color: #1971c2;">🔌 独立エンドポイントで表示中</h3>
+                <p>検索結果: ${data.total}件の助成金が見つかりました （${data.current_page}/${data.pages}ページ）</p>`;
+                
+            if (data.search_query) {
+                html += `<p>検索キーワード: "${data.search_query}"</p>`;
+            }
+            
+            html += '<div class="grants-list">';
+            
+            data.grants.forEach(grant => {
+                html += `<div class="grant-item independent-item" style="border: 1px solid #ddd; padding: 15px; margin: 10px 0; background: white; border-left: 4px solid #4dabf7;">
+                    <h4 style="margin: 0 0 10px 0;"><a href="${grant.permalink}" target="_blank">${grant.title}</a></h4>
+                    <p style="margin: 5px 0;">${grant.excerpt}</p>
+                    <div style="font-size: 12px; color: #666; margin-top: 10px;">
+                        <span>金額: ${grant.meta.max_amount || 'N/A'}</span> | 
+                        <span>組織: ${grant.meta.organization || 'N/A'}</span> | 
+                        <span>ステータス: ${grant.meta.application_status || 'N/A'}</span>
+                    </div>
+                    <small style="color: #999;">ID: ${grant.id} | 日付: ${grant.date}</small>
+                </div>`;
+            });
+            
+            html += '</div></div>';
+            container.innerHTML = html;
+        },
+        
         /**
          * 緊急フォールバック検索
          */
