@@ -1328,7 +1328,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
                     body: new URLSearchParams({
-                        action: 'gi_load_grants',
+                        action: 'gi_ajax_load_grants',
                         nonce: '<?php echo $search_nonce; ?>',
                         search: searchParams.search,
                         categories: JSON.stringify(searchParams.categories),

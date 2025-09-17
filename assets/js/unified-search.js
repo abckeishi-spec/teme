@@ -401,7 +401,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // AJAX検索実行
                 const formData = new FormData();
-                formData.append('action', 'gi_load_grants');
+                formData.append('action', 'gi_ajax_load_grants');
                 formData.append('nonce', this.config.nonce);
                 
                 // パラメータを追加

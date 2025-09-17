@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             try {
                 const formData = new FormData();
-                formData.append('action', 'gi_load_grants');
+                formData.append('action', 'gi_ajax_load_grants');
                 formData.append('nonce', window.giSearchConfig.nonce);
                 formData.append('search', this.state.filters.search || '');
                 formData.append('categories', JSON.stringify(this.state.filters.categories || []));
