@@ -1263,6 +1263,70 @@ add_action('wp_ajax_gi_simple_load', 'gi_simple_grants_loader');
 add_action('wp_ajax_nopriv_gi_simple_load', 'gi_simple_grants_loader');
 
 /**
+ * シンプル検索AJAX - 最小限のセキュリティで確実に動作
+ */
+function gi_simple_search_ajax() {
+    error_log('[SIMPLE_SEARCH] Called gi_simple_search_ajax');
+    
+    // 基本チェックのみ
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        wp_send_json_error('Method not allowed');
+        return;
+    }
+    
+    try {
+        // 検索パラメータ取得
+        $search_query = sanitize_text_field($_POST['search'] ?? '');
+        error_log('[SIMPLE_SEARCH] Search query: ' . $search_query);
+        
+        // シンプルなクエリ
+        $args = array(
+            'post_type' => 'grant',
+            'posts_per_page' => 10,
+            'post_status' => 'publish'
+        );
+        
+        if (!empty($search_query)) {
+            $args['s'] = $search_query;
+        }
+        
+        $query = new WP_Query($args);
+        $grants = array();
+        
+        if ($query->have_posts()) {
+            while ($query->have_posts()) {
+                $query->the_post();
+                $grants[] = array(
+                    'id' => get_the_ID(),
+                    'title' => get_the_title(),
+                    'excerpt' => get_the_excerpt(),
+                    'permalink' => get_the_permalink(),
+                    'date' => get_the_date('Y-m-d'),
+                    'meta' => array(
+                        'max_amount' => get_post_meta(get_the_ID(), 'max_amount', true) ?: 'N/A',
+                        'organization' => get_post_meta(get_the_ID(), 'organization', true) ?: 'N/A',
+                        'application_status' => get_post_meta(get_the_ID(), 'application_status', true) ?: 'N/A'
+                    )
+                );
+            }
+            wp_reset_postdata();
+        }
+        
+        wp_send_json_success(array(
+            'grants' => $grants,
+            'total' => $query->found_posts,
+            'message' => '検索成功'
+        ));
+        
+    } catch (Exception $e) {
+        error_log('[SIMPLE_SEARCH] Exception: ' . $e->getMessage());
+        wp_send_json_error('検索エラー: ' . $e->getMessage());
+    }
+}
+add_action('wp_ajax_gi_simple_search', 'gi_simple_search_ajax');
+add_action('wp_ajax_nopriv_gi_simple_search', 'gi_simple_search_ajax');
+
+/**
  * 緊急用超シンプルAJAX - すべてのチェックをバイパス
  */
 function gi_emergency_ajax_test() {
