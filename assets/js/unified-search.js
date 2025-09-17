@@ -1,1521 +1,1055 @@
-<?php
 /**
- * Grant Insight Perfect - AJAX Functions Fixed Edition
- * 完全修正版
- *
+ * Grant Insight Perfect - Unified Search System JavaScript
+ * 統合検索システム JavaScript 完全版
+ * 
+ * @version 5.0-ultimate
  * @package Grant_Insight_Perfect
- * @version 4.1-fixed
  */
 
-// セキュリティチェック
-if (!defined('ABSPATH')) {
-    exit;
-}
+document.addEventListener('DOMContentLoaded', function() {
+    'use strict';
 
-// ================================================================================
-// 不足している関数を追加
-// ================================================================================
+    console.log('🚀 統合検索システム 初期化開始');
 
-/**
- * ステータスをUI用に変換
- */
-function gi_map_application_status_ui($status) {
-    $map = array(
-        'open' => '募集中',
-        'active' => '募集中',
-        'upcoming' => '準備中',
-        'closed' => '終了',
-        'preparing' => '準備中',
-        'ended' => '終了'
-    );
-    return isset($map[$status]) ? $map[$status] : $status;
-}
-
-/**
- * 締切日のフォーマット
- */
-function gi_get_formatted_deadline($post_id) {
-    $deadline = get_post_meta($post_id, 'deadline_date', true);
-    
-    if (empty($deadline)) {
-        return '随時';
-    }
-    
-    // 日付形式の処理
-    if (is_numeric($deadline)) {
-        // UNIXタイムスタンプの場合
-        $deadline_time = intval($deadline);
-    } else {
-        // 文字列の場合
-        $deadline_time = strtotime($deadline);
-    }
-    
-    if ($deadline_time === false) {
-        return $deadline; // パースできない場合はそのまま返す
-    }
-    
-    $current_time = current_time('timestamp');
-    
-    if ($deadline_time < $current_time) {
-        return '終了';
-    }
-    
-    return date('Y年n月j日', $deadline_time);
-}
-
-/**
- * アクティブフィルター情報を取得
- */
-function gi_get_active_filter_info($categories, $prefectures, $amount, $status, $difficulty, $success_rate) {
-    $info = array();
-    
-    if (!empty($categories)) {
-        $info['categories'] = $categories;
-    }
-    if (!empty($prefectures)) {
-        $info['prefectures'] = $prefectures;
-    }
-    if (!empty($amount)) {
-        $info['amount'] = $amount;
-    }
-    if (!empty($status)) {
-        $info['status'] = $status;
-    }
-    if (!empty($difficulty)) {
-        $info['difficulty'] = $difficulty;
-    }
-    if (!empty($success_rate)) {
-        $info['success_rate'] = $success_rate;
-    }
-    
-    return $info;
-}
-
-/**
- * 検索統計を計算
- */
-function gi_calculate_search_statistics($query) {
-    return array(
-        'total_results' => $query->found_posts,
-        'current_showing' => $query->post_count,
-        'total_pages' => $query->max_num_pages
-    );
-}
-
-/**
- * 一般統計情報を取得
- */
-function gi_get_general_statistics() {
-    $total_grants = wp_count_posts('grant')->publish;
-    
-    // 募集中の助成金数
-    $active_grants = new WP_Query(array(
-        'post_type' => 'grant',
-        'meta_key' => 'application_status',
-        'meta_value' => 'open',
-        'posts_per_page' => -1,
-        'fields' => 'ids'
-    ));
-    
-    return array(
-        'total_grants' => $total_grants,
-        'active_grants' => $active_grants->found_posts,
-        'categories' => wp_count_terms('grant_category'),
-        'prefectures' => wp_count_terms('grant_prefecture')
-    );
-}
-
-/**
- * AI推薦を取得（簡易版）
- */
-function gi_get_ai_recommendations($current_grant, $limit, $exclude_ids) {
-    // 簡易的な推薦ロジック
-    $args = array(
-        'post_type' => 'grant',
-        'posts_per_page' => $limit,
-        'post__not_in' => array_merge(array($current_grant['id']), $exclude_ids),
-        'meta_key' => 'grant_views',
-        'orderby' => 'meta_value_num',
-        'order' => 'DESC'
-    );
-    
-    $query = new WP_Query($args);
-    $recommendations = array();
-    
-    if ($query->have_posts()) {
-        while ($query->have_posts()) {
-            $query->the_post();
-            $recommendations[get_the_ID()] = rand(70, 95); // スコア
-        }
-        wp_reset_postdata();
-    }
-    
-    return $recommendations;
-}
-
-/**
- * 人気キーワードを取得
- */
-function gi_get_popular_keywords($keyword) {
-    // 簡易実装
-    return array(
-        array('keyword' => $keyword . ' 補助金', 'count' => rand(10, 100)),
-        array('keyword' => $keyword . ' 助成', 'count' => rand(10, 100))
-    );
-}
-
-/**
- * 比較テーブルを生成
- */
-function gi_generate_comparison_table($comparison_data) {
-    ob_start();
-    ?>
-    <div class="comparison-table-container overflow-x-auto">
-        <table class="w-full border-collapse">
-            <thead>
-                <tr class="bg-gray-50">
-                    <th class="border p-3 text-left">項目</th>
-                    <?php foreach ($comparison_data as $grant): ?>
-                        <th class="border p-3 text-center"><?php echo esc_html($grant['title']); ?></th>
-                    <?php endforeach; ?>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td class="border p-3 font-semibold">最大助成額</td>
-                    <?php foreach ($comparison_data as $grant): ?>
-                        <td class="border p-3 text-center font-bold text-green-600">
-                            <?php echo gi_format_amount_with_unit($grant['amount_numeric']); ?>
-                        </td>
-                    <?php endforeach; ?>
-                </tr>
-                <tr class="bg-gray-50">
-                    <td class="border p-3 font-semibold">締切</td>
-                    <?php foreach ($comparison_data as $grant): ?>
-                        <td class="border p-3 text-center"><?php echo esc_html($grant['deadline']); ?></td>
-                    <?php endforeach; ?>
-                </tr>
-                <tr>
-                    <td class="border p-3 font-semibold">採択率</td>
-                    <?php foreach ($comparison_data as $grant): ?>
-                        <td class="border p-3 text-center"><?php echo intval($grant['success_rate']); ?>%</td>
-                    <?php endforeach; ?>
-                </tr>
-                <tr class="bg-gray-50">
-                    <td class="border p-3 font-semibold">実施機関</td>
-                    <?php foreach ($comparison_data as $grant): ?>
-                        <td class="border p-3 text-center"><?php echo esc_html($grant['organization']); ?></td>
-                    <?php endforeach; ?>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-    <?php
-    return ob_get_clean();
-}
-
-/**
- * ユーザーアクティビティログ
- */
-function gi_log_user_activity($user_id, $action, $post_id) {
-    // 簡易実装
-    $log = get_user_meta($user_id, 'gi_activity_log', true);
-    if (!is_array($log)) $log = array();
-    
-    $log[] = array(
-        'action' => $action,
-        'post_id' => $post_id,
-        'timestamp' => current_time('timestamp')
-    );
-    
-    // 最新100件のみ保持
-    $log = array_slice($log, -100);
-    
-    update_user_meta($user_id, 'gi_activity_log', $log);
-}
-
-// ================================================================================
-// メイン検索機能の修正版
-// ================================================================================
-
-add_action('wp_ajax_gi_load_grants', 'gi_ajax_load_grants_fixed');
-add_action('wp_ajax_nopriv_gi_load_grants', 'gi_ajax_load_grants_fixed');
-
-function gi_ajax_load_grants_fixed() {
-    // レスポンスヘッダー設定
-    header('Content-Type: application/json; charset=utf-8');
-    
-    // nonceチェック
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error(array(
-            'message' => 'セキュリティチェックに失敗しました',
-            'code' => 'invalid_nonce'
-        ), 403);
+    // グローバル設定チェック
+    if (typeof window.giSearchConfig === 'undefined') {
+        console.error('❌ 検索設定が見つかりません');
+        return;
     }
 
-    // パラメータ取得と検証
-    $search = sanitize_text_field($_POST['search'] ?? '');
-    
-    // JSON文字列をデコード（配列パラメータ）
-    $categories = json_decode(stripslashes($_POST['categories'] ?? '[]'), true);
-    $prefectures = json_decode(stripslashes($_POST['prefectures'] ?? '[]'), true);
-    $industries = json_decode(stripslashes($_POST['industries'] ?? '[]'), true); // 業種追加
-    $status = json_decode(stripslashes($_POST['status'] ?? '[]'), true);
-    $difficulty = json_decode(stripslashes($_POST['difficulty'] ?? '[]'), true);
-    $success_rate = json_decode(stripslashes($_POST['success_rate'] ?? '[]'), true);
-    
-    // 単一パラメータ
-    $amount = sanitize_text_field($_POST['amount'] ?? '');
-    $sort = sanitize_text_field($_POST['sort'] ?? 'date_desc');
-    $view = sanitize_text_field($_POST['view'] ?? 'grid');
-    $page = max(1, intval($_POST['page'] ?? 1));
-    $posts_per_page = intval($_POST['posts_per_page'] ?? $_POST['per_page'] ?? 12);
-    
-    // 配列検証
-    $categories = is_array($categories) ? array_map('sanitize_text_field', $categories) : [];
-    $prefectures = is_array($prefectures) ? array_map('sanitize_text_field', $prefectures) : [];
-    $industries = is_array($industries) ? array_map('sanitize_text_field', $industries) : [];
-    $status = is_array($status) ? array_map('sanitize_text_field', $status) : [];
-    $difficulty = is_array($difficulty) ? array_map('sanitize_text_field', $difficulty) : [];
-    $success_rate = is_array($success_rate) ? array_map('sanitize_text_field', $success_rate) : [];
-    
-    // デバッグログ
-    if (defined('WP_DEBUG') && WP_DEBUG) {
-        error_log('=== AJAX Load Grants Debug ===');
-        error_log('Categories: ' . print_r($categories, true));
-        error_log('Prefectures: ' . print_r($prefectures, true));
-        error_log('Industries: ' . print_r($industries, true));
-    }
-    
-    // ステータスマッピング
-    $status_mapping = array(
-        'active' => 'open',
-        'upcoming' => 'upcoming',
-        'closed' => 'closed'
-    );
-    
-    $mapped_status = array();
-    foreach ($status as $s) {
-        $mapped_status[] = isset($status_mapping[$s]) ? $status_mapping[$s] : $s;
-    }
-    $status = $mapped_status;
+    // 統合検索システムメインクラス
+    const GISearchManager = {
+        // 設定
+        config: {
+            ajaxUrl: window.giSearchConfig.ajaxUrl,
+            nonce: window.giSearchConfig.nonce,
+            grantsUrl: window.giSearchConfig.grantsUrl || '/grants/',
+            homeUrl: window.giSearchConfig.homeUrl || '/',
+            debug: window.giSearchConfig.debug || false,
+            timeout: 30000,
+            debounceDelay: 500
+        },
 
-    // クエリ構築
-    $args = array(
-        'post_type' => 'grant',
-        'posts_per_page' => $posts_per_page,
-        'paged' => $page,
-        'post_status' => 'publish'
-    );
+        // 状態管理
+        state: {
+            isLoading: false,
+            lastSearch: null,
+            searchResults: [],
+            currentFilters: {},
+            searchCache: new Map(),
+            requestController: null
+        },
 
-    // 検索キーワード
-    if (!empty($search)) {
-        $args['s'] = $search;
-    }
+        // DOM要素キャッシュ
+        elements: {},
 
-    // タクソノミークエリ
-    $tax_query = array('relation' => 'AND');
-    
-    // カテゴリフィルター
-    if (!empty($categories)) {
-        $tax_query[] = array(
-            'taxonomy' => 'grant_category',
-            'field' => 'slug',
-            'terms' => $categories,
-            'operator' => 'IN'
-        );
-    }
-    
-    // 都道府県フィルター
-    if (!empty($prefectures)) {
-        $tax_query[] = array(
-            'taxonomy' => 'grant_prefecture',
-            'field' => 'slug',
-            'terms' => $prefectures,
-            'operator' => 'IN'
-        );
-    }
-    
-    // 業種フィルター（追加）
-    if (!empty($industries)) {
-        $tax_query[] = array(
-            'taxonomy' => 'grant_industry',
-            'field' => 'slug',
-            'terms' => $industries,
-            'operator' => 'IN'
-        );
-    }
-    
-    if (count($tax_query) > 1) {
-        $args['tax_query'] = $tax_query;
-    }
-
-    // メタクエリ
-    $meta_query = array('relation' => 'AND');
-
-    // ステータスフィルター
-    if (!empty($status)) {
-        $meta_query[] = array(
-            'key' => 'application_status',
-            'value' => $status,
-            'compare' => 'IN'
-        );
-    }
-    
-    // その他のメタクエリ（元のコードから継承）
-    if (!empty($difficulty)) {
-        $meta_query[] = array(
-            'key' => 'grant_difficulty',
-            'value' => $difficulty,
-            'compare' => 'IN'
-        );
-    }
-    
-    if (!empty($amount)) {
-        switch ($amount) {
-            case '0-100':
-                $meta_query[] = array(
-                    'key' => 'max_amount_numeric',
-                    'value' => 1000000,
-                    'compare' => '<=',
-                    'type' => 'NUMERIC'
-                );
-                break;
-            case '100-500':
-                $meta_query[] = array(
-                    'key' => 'max_amount_numeric',
-                    'value' => array(1000001, 5000000),
-                    'compare' => 'BETWEEN',
-                    'type' => 'NUMERIC'
-                );
-                break;
-            case '500-1000':
-                $meta_query[] = array(
-                    'key' => 'max_amount_numeric',
-                    'value' => array(5000001, 10000000),
-                    'compare' => 'BETWEEN',
-                    'type' => 'NUMERIC'
-                );
-                break;
-            case '1000+':
-                $meta_query[] = array(
-                    'key' => 'max_amount_numeric',
-                    'value' => 10000001,
-                    'compare' => '>=',
-                    'type' => 'NUMERIC'
-                );
-                break;
-        }
-    }
-
-    if (count($meta_query) > 1) {
-        $args['meta_query'] = $meta_query;
-    }
-
-    // ソート設定
-    switch ($sort) {
-        case 'date_desc':
-            $args['orderby'] = 'date';
-            $args['order'] = 'DESC';
-            break;
-        case 'date_asc':
-            $args['orderby'] = 'date';
-            $args['order'] = 'ASC';
-            break;
-        case 'amount_desc':
-            $args['orderby'] = 'meta_value_num';
-            $args['meta_key'] = 'max_amount_numeric';
-            $args['order'] = 'DESC';
-            break;
-        case 'amount_asc':
-            $args['orderby'] = 'meta_value_num';
-            $args['meta_key'] = 'max_amount_numeric';
-            $args['order'] = 'ASC';
-            break;
-        default:
-            $args['orderby'] = 'date';
-            $args['order'] = 'DESC';
-    }
-
-    // クエリ実行
-    $query = new WP_Query($args);
-    
-    // デバッグ
-    if (defined('WP_DEBUG') && WP_DEBUG) {
-        error_log('Found posts: ' . $query->found_posts);
-        error_log('SQL: ' . $query->request);
-    }
-    
-    // レスポンスデータ生成
-    $grants_html = array();
-    $grants_data = array();
-    
-    if ($query->have_posts()) {
-        while ($query->have_posts()) {
-            $query->the_post();
-            $post_id = get_the_ID();
+        /**
+         * 初期化
+         */
+        init() {
+            console.log('📝 統合検索システム初期化中...');
             
-            // データ収集
-            $grant_data = gi_get_grant_data($post_id);
+            this.cacheElements();
+            this.bindEvents();
+            this.setupSearchInterface();
+            this.loadSavedFilters();
             
-            // HTMLレンダリング
-            $card_html = '';
-            if ($view === 'list') {
-                $card_html = gi_render_grant_list_ultimate($grant_data);
+            console.log('✅ 統合検索システム初期化完了');
+        },
+
+        /**
+         * DOM要素のキャッシュ
+         */
+        cacheElements() {
+            // 検索フォーム要素
+            this.elements = {
+                searchForm: document.getElementById('unified-search-form'),
+                searchInput: document.getElementById('search-keyword-input'),
+                grantsSearchInput: document.getElementById('grant-search'),
+                searchBtn: document.getElementById('search-btn'),
+                searchSubmitBtn: document.getElementById('search-submit-btn'),
+                clearBtn: document.getElementById('clear-search-btn'),
+                
+                // フィルター要素
+                categoryFilter: document.getElementById('filter-category'),
+                prefectureFilter: document.getElementById('filter-prefecture'),
+                amountFilter: document.getElementById('filter-amount'),
+                statusFilter: document.getElementById('filter-status'),
+                difficultyFilter: document.getElementById('filter-difficulty'),
+                successRateFilter: document.getElementById('filter-success-rate'),
+                
+                // 結果表示要素
+                grantsContainer: document.getElementById('grants-display'),
+                grantsGrid: document.querySelector('.grants-grid'),
+                loadingIndicator: document.getElementById('loading-indicator'),
+                resultsCount: document.getElementById('results-count'),
+                paginationContainer: document.getElementById('pagination-container'),
+                
+                // プレビュー要素
+                resultsPreview: document.getElementById('search-results-preview'),
+                previewContent: document.getElementById('preview-content'),
+                previewCount: document.getElementById('preview-count'),
+                closePreview: document.getElementById('close-preview'),
+                
+                // サジェスト要素
+                searchSuggestions: document.getElementById('search-suggestions'),
+                
+                // フィルター制御
+                quickFilters: document.querySelectorAll('.quick-filter-pill'),
+                applyFiltersBtn: document.getElementById('apply-filters'),
+                resetFiltersBtn: document.getElementById('reset-all-filters')
+            };
+
+            // 存在しない要素を除外
+            Object.keys(this.elements).forEach(key => {
+                if (this.elements[key] === null) {
+                    delete this.elements[key];
+                }
+            });
+        },
+
+        /**
+         * イベントバインディング
+         */
+        bindEvents() {
+            // 検索フォーム送信
+            if (this.elements.searchForm) {
+                this.elements.searchForm.addEventListener('submit', (e) => this.handleFormSubmit(e));
+            }
+
+            // 検索ボタン
+            if (this.elements.searchBtn) {
+                this.elements.searchBtn.addEventListener('click', (e) => this.handleSearchClick(e));
+            }
+
+            if (this.elements.searchSubmitBtn) {
+                this.elements.searchSubmitBtn.addEventListener('click', (e) => this.handleSearchClick(e));
+            }
+
+            // 検索入力
+            const searchInputs = [this.elements.searchInput, this.elements.grantsSearchInput].filter(Boolean);
+            searchInputs.forEach(input => {
+                input.addEventListener('input', this.debounce((e) => this.handleSearchInput(e), this.config.debounceDelay));
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.executeSearch();
+                    }
+                });
+                input.addEventListener('focus', () => this.showSuggestions());
+                input.addEventListener('blur', () => setTimeout(() => this.hideSuggestions(), 200));
+            });
+
+            // クリアボタン
+            if (this.elements.clearBtn) {
+                this.elements.clearBtn.addEventListener('click', () => this.clearSearch());
+            }
+
+            // フィルター適用
+            if (this.elements.applyFiltersBtn) {
+                this.elements.applyFiltersBtn.addEventListener('click', () => this.applyFilters());
+            }
+
+            // フィルターリセット
+            if (this.elements.resetFiltersBtn) {
+                this.elements.resetFiltersBtn.addEventListener('click', () => this.resetFilters());
+            }
+
+            // クイックフィルター
+            this.elements.quickFilters?.forEach(filter => {
+                filter.addEventListener('click', (e) => this.handleQuickFilter(e));
+            });
+
+            // プレビュー閉じる
+            if (this.elements.closePreview) {
+                this.elements.closePreview.addEventListener('click', () => this.closePreview());
+            }
+
+            // フィルター変更
+            const filterElements = [
+                this.elements.categoryFilter,
+                this.elements.prefectureFilter,
+                this.elements.amountFilter,
+                this.elements.statusFilter,
+                this.elements.difficultyFilter,
+                this.elements.successRateFilter
+            ].filter(Boolean);
+
+            filterElements.forEach(filter => {
+                filter.addEventListener('change', () => this.handleFilterChange());
+            });
+
+            // ページ全体での動的要素対応
+            document.addEventListener('click', (e) => this.handleGlobalClick(e));
+        },
+
+        /**
+         * 検索インターフェースのセットアップ
+         */
+        setupSearchInterface() {
+            // アーカイブページの検索フォームを統合検索に接続
+            if (window.ArchiveManager) {
+                console.log('🔗 アーカイブページ検索システムと連携');
+                this.setupArchiveIntegration();
+            }
+
+            // フロントページの検索セクションと連携
+            if (window.SearchSection) {
+                console.log('🔗 検索セクションと連携');
+                this.setupSectionIntegration();
+            }
+
+            // ローディング状態の初期化
+            this.hideLoading();
+        },
+
+        /**
+         * アーカイブページとの統合
+         */
+        setupArchiveIntegration() {
+            if (!window.ArchiveManager) return;
+
+            // アーカイブページの検索を統合システムに委譲
+            const originalExecuteSearch = window.ArchiveManager.executeSearch;
+            window.ArchiveManager.executeSearch = (...args) => {
+                return this.executeSearch(...args);
+            };
+        },
+
+        /**
+         * 検索セクションとの統合
+         */
+        setupSectionIntegration() {
+            if (!window.SearchSection) return;
+
+            // 検索セクションの検索を統合システムに委譲
+            const originalExecuteSearch = window.SearchSection.executeSearch;
+            window.SearchSection.executeSearch = (...args) => {
+                return this.executeSearch(...args);
+            };
+        },
+
+        /**
+         * フォーム送信処理
+         */
+        handleFormSubmit(e) {
+            e.preventDefault();
+            this.executeSearch();
+        },
+
+        /**
+         * 検索ボタンクリック処理
+         */
+        handleSearchClick(e) {
+            e.preventDefault();
+            this.executeSearch();
+        },
+
+        /**
+         * 検索入力処理
+         */
+        handleSearchInput(e) {
+            const value = e.target.value.trim();
+            
+            // クリアボタンの表示制御
+            if (this.elements.clearBtn) {
+                this.elements.clearBtn.classList.toggle('hidden', !value);
+            }
+
+            // サジェスト表示
+            if (value.length >= 2) {
+                this.showSuggestions(value);
             } else {
-                $card_html = gi_render_grant_card_ultimate($grant_data);
+                this.hideSuggestions();
             }
+        },
+
+        /**
+         * フィルター変更処理
+         */
+        handleFilterChange() {
+            // リアルタイム検索（デバウンス）
+            if (this.filterChangeTimeout) {
+                clearTimeout(this.filterChangeTimeout);
+            }
+
+            this.filterChangeTimeout = setTimeout(() => {
+                this.executeSearch();
+            }, this.config.debounceDelay);
+        },
+
+        /**
+         * クイックフィルター処理
+         */
+        handleQuickFilter(e) {
+            const filter = e.currentTarget;
+            const filterType = filter.dataset.filter;
+
+            // アクティブ状態の切り替え
+            filter.classList.toggle('active');
+
+            // フィルターの適用
+            this.applyQuickFilterLogic(filterType, filter.classList.contains('active'));
             
-            $grants_html[] = array(
-                'html' => $card_html,
-                'data' => $grant_data
-            );
-            $grants_data[] = $grant_data;
-        }
-        wp_reset_postdata();
-    }
+            // 即座に検索実行
+            this.executeSearch();
+        },
 
-    // ページネーション生成
-    $pagination_html = gi_generate_pagination_ultimate($query->max_num_pages, $page);
+        /**
+         * クイックフィルターロジック
+         */
+        applyQuickFilterLogic(filterType, isActive) {
+            switch (filterType) {
+                case 'all':
+                    if (isActive) {
+                        this.resetFilters(false); // 検索は実行しない
+                    }
+                    break;
+                case 'active':
+                    if (this.elements.statusFilter) {
+                        this.elements.statusFilter.value = isActive ? 'active' : '';
+                    }
+                    break;
+                case 'upcoming':
+                    if (this.elements.statusFilter) {
+                        this.elements.statusFilter.value = isActive ? 'upcoming' : '';
+                    }
+                    break;
+                case 'high-amount':
+                    if (this.elements.amountFilter) {
+                        this.elements.amountFilter.value = isActive ? '1000+' : '';
+                    }
+                    break;
+                case 'easy':
+                    if (this.elements.difficultyFilter) {
+                        this.elements.difficultyFilter.value = isActive ? 'easy' : '';
+                    }
+                    break;
+                case 'high-success':
+                    if (this.elements.successRateFilter) {
+                        this.elements.successRateFilter.value = isActive ? 'high' : '';
+                    }
+                    break;
+            }
+        },
 
-    // レスポンス送信
-    wp_send_json_success(array(
-        'grants' => $grants_html,
-        'grants_data' => $grants_data,
-        'found_posts' => $query->found_posts,
-        'pagination' => array(
-            'current_page' => $page,
-            'total_pages' => $query->max_num_pages,
-            'total_posts' => $query->found_posts,
-            'posts_per_page' => $posts_per_page,
-            'html' => $pagination_html
-        ),
-        'view' => $view,
-        'filters' => gi_get_active_filter_info($categories, $prefectures, $amount, $status, $difficulty, $success_rate),
-        'statistics' => gi_calculate_search_statistics($query)
-    ));
-}
+        /**
+         * グローバルクリック処理
+         */
+        handleGlobalClick(e) {
+            // ページネーションボタン
+            if (e.target.classList.contains('pagination-btn')) {
+                e.preventDefault();
+                const page = parseInt(e.target.dataset.page);
+                if (page) {
+                    this.executeSearch({ page });
+                }
+                return;
+            }
 
-    // ================================================================================
-    // ページネーション生成（改良版）
-    // ================================================================================
-    
-    $pagination_html = gi_generate_pagination_ultimate($query->max_num_pages, $page);
+            // お気に入りボタン
+            if (e.target.closest('.favorite-btn')) {
+                e.preventDefault();
+                const btn = e.target.closest('.favorite-btn');
+                const postId = btn.dataset.postId;
+                if (postId) {
+                    this.toggleFavorite(postId);
+                }
+                return;
+            }
 
-    // ================================================================================
-    // フィルター情報の生成
-    // ================================================================================
-    
-    $filter_info = gi_get_active_filter_info($categories, $prefectures, $amount, $status, $difficulty, $success_rate);
+            // サジェストアイテム
+            if (e.target.closest('.suggestion-item')) {
+                const item = e.target.closest('.suggestion-item');
+                const value = item.dataset.value;
+                if (value && this.elements.searchInput) {
+                    this.elements.searchInput.value = value;
+                    this.hideSuggestions();
+                    this.executeSearch();
+                }
+                return;
+            }
+        },
 
-    // ================================================================================
-    // 統計情報の生成
-    // ================================================================================
-    
-    $statistics = gi_calculate_search_statistics($query);
+        /**
+         * 検索実行（メイン関数）
+         */
+        async executeSearch(options = {}) {
+            if (this.state.isLoading) return;
 
-    // ================================================================================
-    // レスポンス送信
-    // ================================================================================
-    
-    wp_send_json_success(array(
-        'grants' => $grants_html,
-        'grants_data' => $grants_data,
-        'found_posts' => $query->found_posts,
-        'pagination' => array(
-            'current_page' => $page,
-            'total_pages' => $query->max_num_pages,
-            'total_posts' => $query->found_posts,
-            'posts_per_page' => $posts_per_page,
-            'html' => $pagination_html
-        ),
-        'view' => $view,
-        'filters' => $filter_info,
-        'statistics' => $statistics,
-        'debug' => defined('WP_DEBUG') && WP_DEBUG ? array(
-            'search' => $search,
-            'categories' => $categories,
-            'prefectures' => $prefectures,
-            'status' => $status,
-            'amount' => $amount,
-            'query_args' => $args,
-            'sql' => $query->request
-        ) : null
-    ));
-}
+            this.state.isLoading = true;
+            this.showLoading();
 
-/**
- * ================================================================================
- * ヘルパー関数
- * ================================================================================
- */
+            // 前回のリクエストをキャンセル
+            if (this.state.requestController) {
+                this.state.requestController.abort();
+            }
 
-/**
- * 助成金データ取得（最適化版）
- */
-function gi_get_grant_data($post_id) {
-    // キャッシュチェック
-    $cache_key = 'gi_grant_data_' . $post_id;
-    $cached_data = wp_cache_get($cache_key);
-    
-    if ($cached_data !== false) {
-        return $cached_data;
-    }
-    
-    // タクソノミー情報取得
-    $grant_terms = get_the_terms($post_id, 'grant_category');
-    $prefecture_terms = get_the_terms($post_id, 'grant_prefecture');
-    
-    // メタデータ一括取得
-    $meta_data = get_post_meta($post_id);
-    
-    $grant_data = array(
-        'id' => $post_id,
-        'title' => get_the_title($post_id),
-        'permalink' => get_permalink($post_id),
-        'excerpt' => get_the_excerpt($post_id),
-        'content' => get_the_content($post_id),
-        'thumbnail' => get_the_post_thumbnail_url($post_id, 'large'),
-        'thumbnail_medium' => get_the_post_thumbnail_url($post_id, 'medium'),
-        'main_category' => (!is_wp_error($grant_terms) && !empty($grant_terms)) ? $grant_terms[0]->name : '',
-        'main_category_slug' => (!is_wp_error($grant_terms) && !empty($grant_terms)) ? $grant_terms[0]->slug : '',
-        'all_categories' => (!is_wp_error($grant_terms) && !empty($grant_terms)) ? wp_list_pluck($grant_terms, 'name') : array(),
-        'prefecture' => (!is_wp_error($prefecture_terms) && !empty($prefecture_terms)) ? $prefecture_terms[0]->name : '',
-        'prefecture_slug' => (!is_wp_error($prefecture_terms) && !empty($prefecture_terms)) ? $prefecture_terms[0]->slug : '',
-        'all_prefectures' => (!is_wp_error($prefecture_terms) && !empty($prefecture_terms)) ? wp_list_pluck($prefecture_terms, 'name') : array(),
-        'organization' => $meta_data['organization'][0] ?? '',
-        'deadline' => gi_get_formatted_deadline($post_id),
-        'deadline_date' => $meta_data['deadline_date'][0] ?? '',
-        'amount' => $meta_data['max_amount'][0] ?? '-',
-        'amount_numeric' => intval($meta_data['max_amount_numeric'][0] ?? 0),
-        'min_amount' => $meta_data['min_amount'][0] ?? '',
-        'min_amount_numeric' => intval($meta_data['min_amount_numeric'][0] ?? 0),
-        'status' => gi_map_application_status_ui($meta_data['application_status'][0] ?? 'open'),
-        'status_raw' => $meta_data['application_status'][0] ?? 'open',
-        'difficulty' => $meta_data['grant_difficulty'][0] ?? '',
-        'success_rate' => intval($meta_data['grant_success_rate'][0] ?? 0),
-        'subsidy_rate' => $meta_data['subsidy_rate'][0] ?? '',
-        'target_business' => $meta_data['target_business'][0] ?? '',
-        'application_period' => $meta_data['application_period'][0] ?? '',
-        'official_url' => $meta_data['official_url'][0] ?? '',
-        'contact_info' => $meta_data['contact_info'][0] ?? '',
-        'requirements' => $meta_data['requirements'][0] ?? '',
-        'documents_needed' => $meta_data['documents_needed'][0] ?? '',
-        'views' => intval($meta_data['grant_views'][0] ?? 0),
-        'is_featured' => $meta_data['is_featured'][0] ?? false,
-        'last_updated' => get_the_modified_date('Y-m-d', $post_id)
-    );
-    
-    // キャッシュに保存（1時間）
-    wp_cache_set($cache_key, $grant_data, '', 3600);
-    
-    return $grant_data;
-}
+            this.state.requestController = new AbortController();
 
-/**
- * 助成金カードHTML生成（究極版）
- */
-function gi_render_grant_card_ultimate($grant_data) {
-    $post_id = $grant_data['id'];
-    $title = esc_html($grant_data['title']);
-    $permalink = esc_url($grant_data['permalink']);
-    $excerpt = wp_trim_words(esc_html($grant_data['excerpt']), 30);
-    $organization = esc_html($grant_data['organization']);
-    
-    // 金額フォーマット
-    $amount = gi_format_amount_with_unit($grant_data['amount_numeric'] ?: $grant_data['amount']);
-    
-    $deadline = esc_html($grant_data['deadline']);
-    $status = esc_html($grant_data['status']);
-    $prefecture = esc_html($grant_data['prefecture']);
-    $category = esc_html($grant_data['main_category']);
-    $success_rate = intval($grant_data['success_rate']);
-    $difficulty = esc_html($grant_data['difficulty']);
-    $views = intval($grant_data['views']);
-    $is_featured = $grant_data['is_featured'];
-    
-    // ステータスに応じた色設定
-    $status_classes = gi_get_status_classes($grant_data['status_raw']);
-    
-    // 難易度表示
-    $difficulty_display = gi_get_difficulty_display($difficulty);
-    
-    // 採択率の表示色
-    $success_color = gi_get_success_rate_color($success_rate);
-    
-    // 締切までの日数計算
-    $days_until_deadline = gi_calculate_days_until_deadline($grant_data['deadline_date']);
-    
-    return <<<HTML
-<div class="grant-card-ultimate w-full" data-grant-id="{$post_id}">
-    <div class="card-container bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden h-full flex flex-col group">
-        
-        <!-- カードヘッダー -->
-        <div class="card-header relative">
-            <!-- サムネイル画像 -->
-            <div class="card-thumbnail relative h-48 bg-gradient-to-br from-indigo-500 to-purple-600 overflow-hidden">
-                {$grant_data['thumbnail'] ? '<img src="' . esc_url($grant_data['thumbnail']) . '" alt="' . $title . '" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500">' : '<div class="flex items-center justify-center h-full"><i class="fas fa-coins text-white text-4xl"></i></div>'}
+            try {
+                // 検索パラメータの構築
+                const params = this.buildSearchParams(options);
                 
-                <!-- オーバーレイ情報 -->
-                <div class="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/50 to-transparent">
-                    <div class="flex justify-between items-start">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold {$status_classes['bg']} {$status_classes['text']}">
-                            <span class="w-2 h-2 bg-current rounded-full mr-1.5 {$status_classes['animate']}"></span>
-                            {$status}
-                        </span>
-                        <div class="flex gap-2">
-                            {$is_featured ? '<span class="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-bold"><i class="fas fa-star mr-1"></i>注目</span>' : ''}
-                            {$days_until_deadline !== null && $days_until_deadline <= 7 ? '<span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse">締切間近</span>' : ''}
-                        </div>
-                    </div>
-                </div>
+                // キャッシュチェック
+                const cacheKey = this.generateCacheKey(params);
+                if (this.state.searchCache.has(cacheKey) && !options.forceRefresh) {
+                    const cachedResult = this.state.searchCache.get(cacheKey);
+                    this.displayResults(cachedResult);
+                    return;
+                }
+
+                // AJAX検索実行
+                const formData = new FormData();
+                formData.append('action', 'gi_load_grants');
+                formData.append('nonce', this.config.nonce);
                 
-                <!-- お気に入りボタン -->
-                <button class="favorite-btn absolute bottom-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-gray-600 hover:text-red-500 hover:bg-white transition-all duration-200 shadow-lg" data-post-id="{$post_id}">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
-        
-        <!-- カードボディ -->
-        <div class="card-body px-5 pt-4 pb-3 flex-grow">
-            <!-- カテゴリと地域 -->
-            <div class="flex items-center gap-2 mb-3 flex-wrap">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
-                    <i class="fas fa-folder mr-1.5"></i>
-                    {$category}
-                </span>
-                <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                    <i class="fas fa-map-marker-alt mr-1.5"></i>
-                    {$prefecture}
-                </span>
-            </div>
-            
-            <!-- タイトル -->
-            <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2 leading-tight line-clamp-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                <a href="{$permalink}" class="hover:underline">
-                    {$title}
-                </a>
-            </h3>
-            
-            <!-- 説明文 -->
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
-                {$excerpt}
-            </p>
-            
-            <!-- 金額表示 -->
-            <div class="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 rounded-xl p-4 mb-4 border border-emerald-200 dark:border-emerald-800">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">最大助成額</div>
-                        <div class="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
-                            {$amount}
+                // パラメータを追加
+                Object.keys(params).forEach(key => {
+                    if (Array.isArray(params[key])) {
+                        formData.append(key, JSON.stringify(params[key]));
+                    } else {
+                        formData.append(key, params[key]);
+                    }
+                });
+
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    body: formData,
+                    signal: this.state.requestController.signal
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // キャッシュに保存
+                    this.state.searchCache.set(cacheKey, data.data);
+                    
+                    // 結果表示
+                    this.displayResults(data.data);
+                    
+                    // 状態更新
+                    this.state.lastSearch = params;
+                    this.state.searchResults = data.data.grants || [];
+
+                    if (this.config.debug) {
+                        console.log('🔍 検索成功:', data.data);
+                    }
+                } else {
+                    throw new Error(data.data?.message || '検索に失敗しました');
+                }
+
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('❌ 検索エラー:', error);
+                    this.showError(error.message || '検索中にエラーが発生しました');
+                }
+            } finally {
+                this.state.isLoading = false;
+                this.hideLoading();
+                this.state.requestController = null;
+            }
+        },
+
+        /**
+         * 検索パラメータ構築
+         */
+        buildSearchParams(options = {}) {
+            const params = {
+                search: '',
+                categories: [],
+                prefectures: [],
+                industries: [],
+                amount: '',
+                status: [],
+                difficulty: [],
+                success_rate: [],
+                sort: 'date_desc',
+                view: 'grid',
+                page: 1,
+                posts_per_page: 12,
+                ...options
+            };
+
+            // フォームデータから値を取得
+            const searchValue = this.getSearchValue();
+            if (searchValue) {
+                params.search = searchValue;
+            }
+
+            // フィルター値を取得
+            if (this.elements.categoryFilter?.value) {
+                params.categories = [this.elements.categoryFilter.value];
+            }
+
+            if (this.elements.prefectureFilter?.value) {
+                params.prefectures = [this.elements.prefectureFilter.value];
+            }
+
+            if (this.elements.amountFilter?.value) {
+                params.amount = this.elements.amountFilter.value;
+            }
+
+            if (this.elements.statusFilter?.value) {
+                params.status = [this.elements.statusFilter.value];
+            }
+
+            if (this.elements.difficultyFilter?.value) {
+                params.difficulty = [this.elements.difficultyFilter.value];
+            }
+
+            if (this.elements.successRateFilter?.value) {
+                params.success_rate = [this.elements.successRateFilter.value];
+            }
+
+            // アーカイブページのフィルターも考慮
+            if (window.ArchiveManager?.state) {
+                const archiveFilters = window.ArchiveManager.state.filters;
+                if (archiveFilters) {
+                    Object.keys(archiveFilters).forEach(key => {
+                        if (archiveFilters[key] && params.hasOwnProperty(key)) {
+                            params[key] = archiveFilters[key];
+                        }
+                    });
+                }
+            }
+
+            return params;
+        },
+
+        /**
+         * 検索値取得
+         */
+        getSearchValue() {
+            if (this.elements.searchInput?.value) {
+                return this.elements.searchInput.value.trim();
+            }
+            if (this.elements.grantsSearchInput?.value) {
+                return this.elements.grantsSearchInput.value.trim();
+            }
+            return '';
+        },
+
+        /**
+         * キャッシュキー生成
+         */
+        generateCacheKey(params) {
+            return JSON.stringify(params);
+        },
+
+        /**
+         * 結果表示
+         */
+        displayResults(data) {
+            // 結果カウント更新
+            this.updateResultsCount(data.found_posts || 0);
+
+            // グリッド表示
+            if (this.elements.grantsContainer || this.elements.grantsGrid) {
+                const container = this.elements.grantsContainer || this.elements.grantsGrid;
+                this.renderGrantsGrid(container, data.grants || []);
+            }
+
+            // ページネーション更新
+            if (this.elements.paginationContainer && data.pagination?.html) {
+                this.elements.paginationContainer.innerHTML = data.pagination.html;
+            }
+
+            // プレビュー表示
+            if (this.elements.resultsPreview && data.grants?.length > 0) {
+                this.showPreview(data);
+            }
+
+            // 結果なし表示
+            if (data.found_posts === 0) {
+                this.showNoResults();
+            }
+
+            // アーカイブページの状態更新
+            if (window.ArchiveManager?.displayResults) {
+                window.ArchiveManager.displayResults(data);
+            }
+        },
+
+        /**
+         * 助成金グリッド描画
+         */
+        renderGrantsGrid(container, grants) {
+            if (!container || !grants) return;
+
+            let html = '';
+            grants.forEach(grant => {
+                if (grant.html) {
+                    html += grant.html;
+                } else if (grant.data) {
+                    // フォールバック：データからHTMLを生成
+                    html += this.generateGrantCard(grant.data);
+                }
+            });
+
+            container.innerHTML = html;
+
+            // カードアニメーション
+            container.querySelectorAll('.grant-card-modern, .grant-card-ultimate').forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        },
+
+        /**
+         * 助成金カード生成（フォールバック用）
+         */
+        generateGrantCard(grantData) {
+            const title = grantData.title || '助成金情報';
+            const permalink = grantData.permalink || '#';
+            const excerpt = grantData.excerpt || '';
+            const amount = grantData.amount || '-';
+            const deadline = grantData.deadline || '-';
+            const status = grantData.status || '募集中';
+            const category = grantData.main_category || '';
+            const prefecture = grantData.prefecture || '';
+
+            return `
+                <div class="grant-card-modern w-full" data-grant-id="${grantData.id || ''}">
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden h-full flex flex-col">
+                        <div class="px-4 pt-4 pb-3">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                    <span class="w-1.5 h-1.5 bg-current rounded-full mr-1.5"></span>
+                                    ${status}
+                                </span>
+                                <button class="favorite-btn text-gray-400 hover:text-red-500 transition-colors p-1" data-post-id="${grantData.id || ''}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <h3 class="text-sm font-bold text-gray-900 dark:text-gray-100 leading-tight line-clamp-2">
+                                <a href="${permalink}" class="hover:text-emerald-600 transition-colors">
+                                    ${title}
+                                </a>
+                            </h3>
+                        </div>
+                        
+                        <div class="px-4 pb-3 flex-grow">
+                            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                                    ${category}
+                                </span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                    📍 ${prefecture}
+                                </span>
+                            </div>
+                            
+                            <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg p-3 mb-3 border border-emerald-100">
+                                <div class="text-xs text-gray-600 mb-1">最大助成額</div>
+                                <div class="text-xl font-bold text-emerald-700">
+                                    ${amount}
+                                </div>
+                            </div>
+                            
+                            <div class="text-xs text-gray-600 mb-2">締切: ${deadline}</div>
+                            <p class="text-sm text-gray-600 line-clamp-2">${excerpt}</p>
+                        </div>
+                        
+                        <div class="px-4 pb-4 pt-3 border-t border-gray-100 mt-auto">
+                            <a href="${permalink}" class="block w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-center py-2 px-4 rounded-lg transition-all duration-200 text-sm font-medium">
+                                詳細を見る
+                            </a>
                         </div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">補助率</div>
-                        <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            {$grant_data['subsidy_rate'] ?: '-'}
+                </div>
+            `;
+        },
+
+        /**
+         * 結果カウント更新
+         */
+        updateResultsCount(count) {
+            // 複数の結果表示要素に対応
+            const countElements = [
+                this.elements.resultsCount,
+                document.querySelector('#results-count .count-number'),
+                document.querySelector('.results-title .count-number'),
+                this.elements.previewCount
+            ].filter(Boolean);
+
+            countElements.forEach(el => {
+                if (el) {
+                    el.textContent = count.toLocaleString();
+                }
+            });
+        },
+
+        /**
+         * プレビュー表示
+         */
+        showPreview(data) {
+            if (!this.elements.resultsPreview) return;
+
+            this.elements.resultsPreview.classList.remove('hidden');
+            
+            if (this.elements.previewContent && data.grants) {
+                const previewGrants = data.grants.slice(0, 6);
+                let html = '';
+                previewGrants.forEach(grant => {
+                    html += grant.html || this.generateGrantCard(grant.data || grant);
+                });
+                this.elements.previewContent.innerHTML = html;
+            }
+        },
+
+        /**
+         * 結果なし表示
+         */
+        showNoResults() {
+            const container = this.elements.grantsContainer || this.elements.grantsGrid;
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="col-span-full text-center py-16">
+                    <div class="max-w-md mx-auto">
+                        <i class="fas fa-search text-6xl text-gray-300 mb-6"></i>
+                        <h3 class="text-xl font-bold text-gray-900 mb-4">該当する助成金が見つかりませんでした</h3>
+                        <p class="text-gray-600 mb-6">検索条件を変更して再度お試しください</p>
+                        <button onclick="GISearchManager.resetFilters()" class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition-all">
+                            検索条件をリセット
+                        </button>
+                    </div>
+                </div>
+            `;
+        },
+
+        /**
+         * サジェスト表示
+         */
+        showSuggestions(keyword = '') {
+            if (!this.elements.searchSuggestions) return;
+
+            // サンプルサジェスト
+            const suggestions = [
+                { icon: 'fa-fire', text: 'IT導入補助金', type: '人気' },
+                { icon: 'fa-cogs', text: 'ものづくり補助金', type: '人気' },
+                { icon: 'fa-building', text: '事業再構築補助金', type: 'おすすめ' },
+                { icon: 'fa-users', text: '小規模事業者持続化補助金', type: '簡単' },
+                { icon: 'fa-laptop', text: 'DX推進', type: 'トレンド' }
+            ];
+
+            let html = '';
+            suggestions.forEach(item => {
+                html += `
+                    <div class="suggestion-item cursor-pointer px-4 py-3 hover:bg-gray-50 flex items-center gap-3" data-value="${item.text}">
+                        <i class="fas ${item.icon} text-gray-400"></i>
+                        <span class="flex-1 text-gray-700">${item.text}</span>
+                        <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">${item.type}</span>
+                    </div>
+                `;
+            });
+
+            this.elements.searchSuggestions.innerHTML = html;
+            this.elements.searchSuggestions.classList.remove('hidden');
+        },
+
+        /**
+         * サジェスト非表示
+         */
+        hideSuggestions() {
+            if (this.elements.searchSuggestions) {
+                this.elements.searchSuggestions.classList.add('hidden');
+            }
+        },
+
+        /**
+         * 検索クリア
+         */
+        clearSearch() {
+            // 検索入力をクリア
+            [this.elements.searchInput, this.elements.grantsSearchInput].forEach(input => {
+                if (input) {
+                    input.value = '';
+                }
+            });
+
+            // クリアボタンを非表示
+            if (this.elements.clearBtn) {
+                this.elements.clearBtn.classList.add('hidden');
+            }
+
+            // サジェスト非表示
+            this.hideSuggestions();
+
+            // プレビュー閉じる
+            this.closePreview();
+
+            // 検索実行
+            this.executeSearch();
+        },
+
+        /**
+         * フィルター適用
+         */
+        applyFilters() {
+            this.executeSearch();
+        },
+
+        /**
+         * フィルターリセット
+         */
+        resetFilters(executeSearch = true) {
+            // 検索入力クリア
+            this.clearSearch();
+
+            // フィルター選択リセット
+            const filterElements = [
+                this.elements.categoryFilter,
+                this.elements.prefectureFilter,
+                this.elements.amountFilter,
+                this.elements.statusFilter,
+                this.elements.difficultyFilter,
+                this.elements.successRateFilter
+            ].filter(Boolean);
+
+            filterElements.forEach(filter => {
+                filter.value = '';
+            });
+
+            // クイックフィルターリセット
+            this.elements.quickFilters?.forEach(filter => {
+                filter.classList.remove('active');
+            });
+
+            // 検索実行
+            if (executeSearch) {
+                this.executeSearch();
+            }
+        },
+
+        /**
+         * プレビュー閉じる
+         */
+        closePreview() {
+            if (this.elements.resultsPreview) {
+                this.elements.resultsPreview.classList.add('hidden');
+            }
+        },
+
+        /**
+         * お気に入り切り替え
+         */
+        async toggleFavorite(postId) {
+            try {
+                const formData = new FormData();
+                formData.append('action', 'gi_toggle_favorite');
+                formData.append('nonce', this.config.nonce);
+                formData.append('post_id', postId);
+
+                const response = await fetch(this.config.ajaxUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // UI更新
+                    const btn = document.querySelector(`.favorite-btn[data-post-id="${postId}"]`);
+                    if (btn) {
+                        const svg = btn.querySelector('svg');
+                        if (data.data.is_favorite) {
+                            svg.setAttribute('fill', 'currentColor');
+                            btn.classList.add('text-red-500');
+                        } else {
+                            svg.setAttribute('fill', 'none');
+                            btn.classList.remove('text-red-500');
+                        }
+                    }
+
+                    this.showNotification(data.data.message, 'success');
+                } else {
+                    throw new Error(data.data?.message || 'エラーが発生しました');
+                }
+            } catch (error) {
+                console.error('お気に入りエラー:', error);
+                this.showNotification('お気に入りの更新に失敗しました', 'error');
+            }
+        },
+
+        /**
+         * ローディング表示
+         */
+        showLoading() {
+            if (this.elements.loadingIndicator) {
+                this.elements.loadingIndicator.classList.remove('hidden');
+            }
+
+            // 検索ボタンのローディング状態
+            const searchButtons = [this.elements.searchBtn, this.elements.searchSubmitBtn].filter(Boolean);
+            searchButtons.forEach(btn => {
+                const btnText = btn.querySelector('.btn-text, .btn-content');
+                const btnLoading = btn.querySelector('.btn-loading');
+                
+                if (btnText) btnText.classList.add('hidden');
+                if (btnLoading) btnLoading.classList.remove('hidden');
+                
+                btn.disabled = true;
+            });
+        },
+
+        /**
+         * ローディング非表示
+         */
+        hideLoading() {
+            if (this.elements.loadingIndicator) {
+                this.elements.loadingIndicator.classList.add('hidden');
+            }
+
+            // 検索ボタンのローディング状態解除
+            const searchButtons = [this.elements.searchBtn, this.elements.searchSubmitBtn].filter(Boolean);
+            searchButtons.forEach(btn => {
+                const btnText = btn.querySelector('.btn-text, .btn-content');
+                const btnLoading = btn.querySelector('.btn-loading');
+                
+                if (btnText) btnText.classList.remove('hidden');
+                if (btnLoading) btnLoading.classList.add('hidden');
+                
+                btn.disabled = false;
+            });
+        },
+
+        /**
+         * エラー表示
+         */
+        showError(message) {
+            this.showNotification(message, 'error');
+            
+            const container = this.elements.grantsContainer || this.elements.grantsGrid;
+            if (container) {
+                container.innerHTML = `
+                    <div class="col-span-full text-center py-16">
+                        <div class="max-w-md mx-auto">
+                            <i class="fas fa-exclamation-triangle text-6xl text-red-400 mb-6"></i>
+                            <h3 class="text-xl font-bold text-gray-900 mb-4">エラーが発生しました</h3>
+                            <p class="text-gray-600 mb-6">${message}</p>
+                            <button onclick="GISearchManager.executeSearch({ forceRefresh: true })" class="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
+                                再試行
+                            </button>
                         </div>
                     </div>
-                </div>
-            </div>
-            
-            <!-- 詳細情報グリッド -->
-            <div class="grid grid-cols-2 gap-3 text-xs">
-                <div class="info-item bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5">
-                    <div class="text-gray-500 dark:text-gray-400 mb-1">
-                        <i class="fas fa-calendar-alt mr-1"></i>
-                        締切
-                    </div>
-                    <div class="font-semibold text-gray-900 dark:text-gray-100">
-                        {$deadline}
-                    </div>
-                </div>
-                <div class="info-item bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5">
-                    <div class="text-gray-500 dark:text-gray-400 mb-1">
-                        <i class="fas fa-percentage mr-1"></i>
-                        採択率
-                    </div>
-                    <div class="font-semibold {$success_color}">
-                        {$success_rate}%
-                    </div>
-                </div>
-                <div class="info-item bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5">
-                    <div class="text-gray-500 dark:text-gray-400 mb-1">
-                        <i class="fas fa-graduation-cap mr-1"></i>
-                        難易度
-                    </div>
-                    <div class="font-semibold">
-                        {$difficulty_display}
-                    </div>
-                </div>
-                <div class="info-item bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2.5">
-                    <div class="text-gray-500 dark:text-gray-400 mb-1">
-                        <i class="fas fa-building mr-1"></i>
-                        実施機関
-                    </div>
-                    <div class="font-semibold text-gray-900 dark:text-gray-100 truncate" title="{$organization}">
-                        {$organization}
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- カードフッター -->
-        <div class="card-footer px-5 pb-5 pt-3 border-t border-gray-100 dark:border-gray-700 mt-auto">
-            <div class="flex items-center justify-between gap-3">
-                <a href="{$permalink}" class="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-center py-2.5 px-4 rounded-xl transition-all duration-200 text-sm font-semibold shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
-                    <i class="fas fa-arrow-right mr-2"></i>
-                    詳細を見る
-                </a>
-                <div class="flex gap-2">
-                    <button class="action-btn p-2.5 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors share-btn" data-url="{$permalink}" data-title="{$title}" title="共有">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m9.032 4.026a9.001 9.001 0 01-7.432 0"></path>
-                        </svg>
-                    </button>
-                    <button class="action-btn p-2.5 text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors compare-btn" data-grant-id="{$post_id}" title="比較">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- メタ情報 -->
-            <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+                `;
+            }
+        },
+
+        /**
+         * 通知表示
+         */
+        showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed bottom-6 right-6 z-50 px-6 py-4 rounded-lg shadow-lg text-white transform translate-x-full transition-transform duration-300`;
+
+            const styles = {
+                'success': 'bg-green-500',
+                'error': 'bg-red-500',
+                'warning': 'bg-yellow-500',
+                'info': 'bg-blue-500'
+            };
+
+            notification.classList.add(styles[type] || styles['info']);
+
+            const icons = {
+                'success': 'fa-check-circle',
+                'error': 'fa-exclamation-circle',
+                'warning': 'fa-exclamation-triangle',
+                'info': 'fa-info-circle'
+            };
+
+            notification.innerHTML = `
                 <div class="flex items-center gap-3">
-                    <span>
-                        <i class="fas fa-eye mr-1"></i>
-                        {$views} views
-                    </span>
-                    <span>
-                        <i class="fas fa-clock mr-1"></i>
-                        {$grant_data['last_updated']}
-                    </span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="quality-score" title="品質スコア">
-                        <i class="fas fa-star text-yellow-500"></i>
-                        <span class="font-semibold">4.5</span>
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-HTML;
-}
-
-/**
- * リスト表示用カード生成
- */
-function gi_render_grant_list_ultimate($grant_data) {
-    // リスト表示用の実装
-    $post_id = $grant_data['id'];
-    $title = esc_html($grant_data['title']);
-    $permalink = esc_url($grant_data['permalink']);
-    $excerpt = wp_trim_words(esc_html($grant_data['excerpt']), 50);
-    $organization = esc_html($grant_data['organization']);
-    $amount = gi_format_amount_with_unit($grant_data['amount_numeric'] ?: $grant_data['amount']);
-    $deadline = esc_html($grant_data['deadline']);
-    $status = esc_html($grant_data['status']);
-    $prefecture = esc_html($grant_data['prefecture']);
-    $category = esc_html($grant_data['main_category']);
-    $success_rate = intval($grant_data['success_rate']);
-    
-    $status_classes = gi_get_status_classes($grant_data['status_raw']);
-    $success_color = gi_get_success_rate_color($success_rate);
-    
-    return <<<HTML
-<div class="grant-list-ultimate bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-700 overflow-hidden mb-4">
-    <div class="p-6 flex flex-col md:flex-row">
-        <!-- 左側：メイン情報 -->
-        <div class="flex-grow md:pr-6 mb-4 md:mb-0">
-            <div class="flex items-start justify-between mb-3">
-                <div class="flex items-center gap-3 flex-wrap">
-                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold {$status_classes['bg']} {$status_classes['text']}">
-                        <span class="w-2 h-2 bg-current rounded-full mr-1.5 {$status_classes['animate']}"></span>
-                        {$status}
-                    </span>
-                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
-                        {$category}
-                    </span>
-                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
-                        <i class="fas fa-map-marker-alt mr-1"></i>
-                        {$prefecture}
-                    </span>
-                </div>
-            </div>
-            
-            <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3 leading-tight">
-                <a href="{$permalink}" class="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                    {$title}
-                </a>
-            </h3>
-            
-            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
-                {$excerpt}
-            </p>
-            
-            <!-- 詳細情報 -->
-            <div class="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                <span class="flex items-center">
-                    <i class="fas fa-building mr-1.5"></i>
-                    {$organization}
-                </span>
-                <span class="flex items-center">
-                    <i class="fas fa-calendar-alt mr-1.5"></i>
-                    締切: {$deadline}
-                </span>
-                <span class="flex items-center">
-                    採択率: <span class="ml-1.5 font-semibold {$success_color}">{$success_rate}%</span>
-                </span>
-            </div>
-        </div>
-        
-        <!-- 右側：金額とアクション -->
-        <div class="flex flex-col items-end justify-between md:pl-6 md:border-l border-gray-200 dark:border-gray-700 md:min-w-[250px]">
-            <div class="text-right mb-4 w-full">
-                <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">最大助成額</div>
-                <div class="text-3xl font-bold text-emerald-700 dark:text-emerald-400">
-                    {$amount}
-                </div>
-            </div>
-            
-            <div class="flex flex-col gap-3 w-full">
-                <a href="{$permalink}" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-center py-3 px-6 rounded-xl transition-all duration-200 font-semibold shadow-md hover:shadow-lg">
-                    詳細を見る
-                    <i class="fas fa-arrow-right ml-2"></i>
-                </a>
-                <div class="flex gap-2">
-                    <button class="flex-1 p-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors favorite-btn" data-post-id="{$post_id}">
-                        <i class="far fa-heart"></i>
-                    </button>
-                    <button class="flex-1 p-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-colors share-btn" data-url="{$permalink}" data-title="{$title}">
-                        <i class="fas fa-share-alt"></i>
-                    </button>
-                    <button class="flex-1 p-2.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 rounded-lg transition-colors compare-btn" data-grant-id="{$post_id}">
-                        <i class="fas fa-balance-scale"></i>
+                    <i class="fas ${icons[type] || icons['info']}"></i>
+                    <span>${message}</span>
+                    <button class="ml-4 text-white/80 hover:text-white transition-colors">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-HTML;
-}
+            `;
 
-/**
- * ================================================================================
- * AJAX - お気に入り機能（改良版）
- * ================================================================================
- */
-add_action('wp_ajax_gi_toggle_favorite', 'gi_ajax_toggle_favorite_ultimate');
-add_action('wp_ajax_nopriv_gi_toggle_favorite', 'gi_ajax_toggle_favorite_ultimate');
+            document.body.appendChild(notification);
 
-function gi_ajax_toggle_favorite_ultimate() {
-    // nonceチェック
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error('セキュリティチェックに失敗しました', 403);
-    }
-    
-    $post_id = intval($_POST['post_id']);
-    $user_id = get_current_user_id();
-    
-    if (!$post_id || !get_post($post_id)) {
-        wp_send_json_error('無効な投稿IDです');
-    }
-    
-    if (!$user_id) {
-        // 非ログインユーザーはセッションまたはCookieで管理
-        session_start();
-        $session_key = 'gi_favorites';
-        $favorites = $_SESSION[$session_key] ?? array();
-        
-        if (in_array($post_id, $favorites)) {
-            $favorites = array_diff($favorites, array($post_id));
-            $action = 'removed';
-            $is_favorite = false;
-        } else {
-            $favorites[] = $post_id;
-            $action = 'added';
-            $is_favorite = true;
-        }
-        
-        $_SESSION[$session_key] = $favorites;
-    } else {
-        // ログインユーザーはユーザーメタで管理
-        $favorites = get_user_meta($user_id, 'gi_favorites', true);
-        if (!is_array($favorites)) $favorites = array();
-        
-        if (in_array($post_id, $favorites)) {
-            $favorites = array_diff($favorites, array($post_id));
-            $action = 'removed';
-            $is_favorite = false;
-        } else {
-            $favorites[] = $post_id;
-            $action = 'added';
-            $is_favorite = true;
-        }
-        
-        update_user_meta($user_id, 'gi_favorites', $favorites);
-        
-        // アクティビティログ記録
-        gi_log_user_activity($user_id, 'favorite_' . $action, $post_id);
-    }
-    
-    // お気に入り数の更新
-    $favorite_count = intval(get_post_meta($post_id, 'favorite_count', true));
-    if ($action === 'added') {
-        $favorite_count++;
-    } else {
-        $favorite_count = max(0, $favorite_count - 1);
-    }
-    update_post_meta($post_id, 'favorite_count', $favorite_count);
-    
-    wp_send_json_success(array(
-        'action' => $action,
-        'post_id' => $post_id,
-        'post_title' => get_the_title($post_id),
-        'count' => count($favorites),
-        'total_favorites' => $favorite_count,
-        'is_favorite' => $is_favorite,
-        'message' => $action === 'added' ? 'お気に入りに追加しました' : 'お気に入りから削除しました'
-    ));
-}
+            // クリックで閉じる
+            notification.querySelector('button').addEventListener('click', () => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => notification.remove(), 300);
+            });
 
-/**
- * ================================================================================
- * AJAX - 関連助成金取得（AI推薦対応）
- * ================================================================================
- */
-add_action('wp_ajax_gi_get_related_grants', 'gi_ajax_get_related_grants_ultimate');
-add_action('wp_ajax_nopriv_gi_get_related_grants', 'gi_ajax_get_related_grants_ultimate');
+            // 表示
+            setTimeout(() => {
+                notification.classList.remove('translate-x-full');
+            }, 10);
 
-function gi_ajax_get_related_grants_ultimate() {
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error('Invalid nonce', 403);
-    }
-    
-    $post_id = intval($_POST['post_id'] ?? 0);
-    $category = sanitize_text_field($_POST['category'] ?? '');
-    $prefecture = sanitize_text_field($_POST['prefecture'] ?? '');
-    $limit = intval($_POST['limit'] ?? 6);
-    $exclude_ids = array_map('intval', $_POST['exclude'] ?? array());
-    
-    // 現在の助成金情報を取得
-    $current_grant = gi_get_grant_data($post_id);
-    
-    // AI推薦ロジック（スコアリングベース）
-    $recommendations = gi_get_ai_recommendations($current_grant, $limit, $exclude_ids);
-    
-    if (!empty($recommendations)) {
-        $html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
-        foreach ($recommendations as $grant_id => $score) {
-            $grant_data = gi_get_grant_data($grant_id);
-            $html .= gi_render_grant_card_ultimate($grant_data);
-        }
-        $html .= '</div>';
-        
-        wp_send_json_success(array(
-            'html' => $html,
-            'count' => count($recommendations),
-            'recommendations' => $recommendations
-        ));
-    } else {
-        // フォールバック: 通常の関連助成金取得
-        $args = array(
-            'post_type' => 'grant',
-            'post_status' => 'publish',
-            'posts_per_page' => $limit,
-            'post__not_in' => array_merge(array($post_id), $exclude_ids),
-            'tax_query' => array('relation' => 'OR')
-        );
-        
-        if ($category) {
-            $args['tax_query'][] = array(
-                'taxonomy' => 'grant_category',
-                'field' => 'slug',
-                'terms' => $category
-            );
-        }
-        
-        if ($prefecture) {
-            $args['tax_query'][] = array(
-                'taxonomy' => 'grant_prefecture',
-                'field' => 'slug',
-                'terms' => $prefecture
-            );
-        }
-        
-        $query = new WP_Query($args);
-        
-        if ($query->have_posts()) {
-            $html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
-            while ($query->have_posts()) {
-                $query->the_post();
-                $grant_data = gi_get_grant_data(get_the_ID());
-                $html .= gi_render_grant_card_ultimate($grant_data);
+            // 自動で閉じる
+            setTimeout(() => {
+                notification.classList.add('translate-x-full');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
+            }, 5000);
+        },
+
+        /**
+         * 保存したフィルター読み込み
+         */
+        loadSavedFilters() {
+            // LocalStorageから保存したフィルターを読み込み
+            try {
+                const saved = localStorage.getItem('gi_saved_filters');
+                if (saved) {
+                    this.savedFilters = JSON.parse(saved);
+                }
+            } catch (e) {
+                console.warn('保存したフィルターの読み込みに失敗:', e);
+                this.savedFilters = [];
             }
-            $html .= '</div>';
-            wp_reset_postdata();
-            
-            wp_send_json_success(array('html' => $html, 'count' => $query->found_posts));
-        } else {
-            wp_send_json_success(array(
-                'html' => '<p class="text-center text-gray-500">関連する助成金が見つかりませんでした。</p>',
-                'count' => 0
-            ));
+        },
+
+        /**
+         * デバウンス関数
+         */
+        debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        },
+
+        /**
+         * ユーティリティ: 要素の存在確認
+         */
+        elementExists(element) {
+            return element !== null && element !== undefined;
         }
-    }
-}
+    };
 
-/**
- * ================================================================================
- * AJAX - 統計情報取得（リアルタイム）
- * ================================================================================
- */
-add_action('wp_ajax_gi_get_statistics', 'gi_ajax_get_statistics_ultimate');
-add_action('wp_ajax_nopriv_gi_get_statistics', 'gi_ajax_get_statistics_ultimate');
+    // グローバルに公開
+    window.GISearchManager = GISearchManager;
 
-function gi_ajax_get_statistics_ultimate() {
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error('セキュリティチェックに失敗しました', 403);
-    }
-    
-    $type = sanitize_text_field($_POST['type'] ?? 'general');
-    
-    // キャッシュチェック
-    $cache_key = 'gi_statistics_' . $type . '_' . date('YmdH');
-    $cached_stats = get_transient($cache_key);
-    
-    if ($cached_stats !== false) {
-        wp_send_json_success($cached_stats);
-        return;
-    }
-    
-    $statistics = array();
-    
-    switch ($type) {
-        case 'general':
-            $statistics = gi_get_general_statistics();
-            break;
-        case 'category':
-            $statistics = gi_get_category_statistics();
-            break;
-        case 'prefecture':
-            $statistics = gi_get_prefecture_statistics();
-            break;
-        case 'trends':
-            $statistics = gi_get_trend_statistics();
-            break;
-        case 'performance':
-            $statistics = gi_get_performance_statistics();
-            break;
-        default:
-            $statistics = gi_get_general_statistics();
-    }
-    
-    // キャッシュ保存（1時間）
-    set_transient($cache_key, $statistics, HOUR_IN_SECONDS);
-    
-    wp_send_json_success($statistics);
-}
+    // 初期化実行
+    GISearchManager.init();
 
-/**
- * ================================================================================
- * AJAX - 検索サジェスト
- * ================================================================================
- */
-add_action('wp_ajax_gi_search_suggest', 'gi_ajax_search_suggest');
-add_action('wp_ajax_nopriv_gi_search_suggest', 'gi_ajax_search_suggest');
-
-function gi_ajax_search_suggest() {
-    $keyword = sanitize_text_field($_POST['keyword'] ?? '');
-    
-    if (strlen($keyword) < 2) {
-        wp_send_json_success(array('suggestions' => array()));
-        return;
-    }
-    
-    $suggestions = array();
-    
-    // 助成金タイトルから検索
-    $grants = get_posts(array(
-        'post_type' => 'grant',
-        's' => $keyword,
-        'posts_per_page' => 5,
-        'fields' => 'ids'
-    ));
-    
-    foreach ($grants as $grant_id) {
-        $suggestions[] = array(
-            'type' => 'grant',
-            'icon' => 'fa-coins',
-            'text' => get_the_title($grant_id),
-            'url' => get_permalink($grant_id)
-        );
-    }
-    
-    // カテゴリから検索
-    $categories = get_terms(array(
-        'taxonomy' => 'grant_category',
-        'name__like' => $keyword,
-        'number' => 3,
-        'hide_empty' => true
-    ));
-    
-    foreach ($categories as $category) {
-        $suggestions[] = array(
-            'type' => 'category',
-            'icon' => 'fa-folder',
-            'text' => $category->name,
-            'count' => $category->count,
-            'url' => get_term_link($category)
-        );
-    }
-    
-    // 人気キーワード
-    $popular_keywords = gi_get_popular_keywords($keyword);
-    foreach ($popular_keywords as $pop_keyword) {
-        $suggestions[] = array(
-            'type' => 'keyword',
-            'icon' => 'fa-fire',
-            'text' => $pop_keyword['keyword'],
-            'count' => $pop_keyword['count']
-        );
-    }
-    
-    wp_send_json_success(array('suggestions' => $suggestions));
-}
-
-/**
- * ================================================================================
- * AJAX - 助成金比較
- * ================================================================================
- */
-add_action('wp_ajax_gi_compare_grants', 'gi_ajax_compare_grants');
-add_action('wp_ajax_nopriv_gi_compare_grants', 'gi_ajax_compare_grants');
-
-function gi_ajax_compare_grants() {
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error('Invalid nonce', 403);
-    }
-    
-    $grant_ids = array_map('intval', $_POST['grant_ids'] ?? array());
-    
-    if (count($grant_ids) < 2) {
-        wp_send_json_error('比較するには2つ以上の助成金を選択してください');
-    }
-    
-    if (count($grant_ids) > 4) {
-        wp_send_json_error('比較できるのは最大4つまでです');
-    }
-    
-    $comparison_data = array();
-    
-    foreach ($grant_ids as $grant_id) {
-        $comparison_data[] = gi_get_grant_data($grant_id);
-    }
-    
-    // 比較表HTML生成
-    $html = gi_generate_comparison_table($comparison_data);
-    
-    wp_send_json_success(array(
-        'html' => $html,
-        'data' => $comparison_data
-    ));
-}
-
-/**
- * ================================================================================
- * AJAX - エクスポート機能
- * ================================================================================
- */
-add_action('wp_ajax_gi_export_grants', 'gi_ajax_export_grants');
-add_action('wp_ajax_nopriv_gi_export_grants', 'gi_ajax_export_grants');
-
-function gi_ajax_export_grants() {
-    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'gi_ajax_nonce')) {
-        wp_send_json_error('Invalid nonce', 403);
-    }
-    
-    $format = sanitize_text_field($_POST['format'] ?? 'csv');
-    $grant_ids = array_map('intval', $_POST['grant_ids'] ?? array());
-    
-    if (empty($grant_ids)) {
-        wp_send_json_error('エクスポートする助成金を選択してください');
-    }
-    
-    $export_data = array();
-    foreach ($grant_ids as $grant_id) {
-        $export_data[] = gi_get_grant_data($grant_id);
-    }
-    
-    switch ($format) {
-        case 'csv':
-            $file_url = gi_export_to_csv($export_data);
-            break;
-        case 'excel':
-            $file_url = gi_export_to_excel($export_data);
-            break;
-        case 'pdf':
-            $file_url = gi_export_to_pdf($export_data);
-            break;
-        default:
-            $file_url = gi_export_to_csv($export_data);
-    }
-    
-    if ($file_url) {
-        wp_send_json_success(array(
-            'file_url' => $file_url,
-            'format' => $format,
-            'count' => count($export_data)
-        ));
-    } else {
-        wp_send_json_error('エクスポートに失敗しました');
-    }
-}
-
-/**
- * ================================================================================
- * ユーティリティ関数
- * ================================================================================
- */
-
-/**
- * 拡張検索クエリ
- */
-function gi_enhanced_search_query($search, $wp_query) {
-    global $wpdb;
-    
-    if (empty($search) || !$wp_query->is_search()) {
-        return $search;
-    }
-    
-    $search_terms = $wp_query->get('search_terms');
-    $search = '';
-    
-    foreach ($search_terms as $term) {
-        $term = esc_sql($wpdb->esc_like($term));
-        $search .= " AND (
-            {$wpdb->posts}.post_title LIKE '%{$term}%' OR 
-            {$wpdb->posts}.post_content LIKE '%{$term}%' OR 
-            {$wpdb->posts}.post_excerpt LIKE '%{$term}%' OR
-            EXISTS (
-                SELECT * FROM {$wpdb->postmeta} 
-                WHERE {$wpdb->postmeta}.post_id = {$wpdb->posts}.ID 
-                AND {$wpdb->postmeta}.meta_value LIKE '%{$term}%'
-            )
-        )";
-    }
-    
-    return $search;
-}
-
-/**
- * 金額フォーマット
- */
-function gi_format_amount_with_unit($amount) {
-    if (!is_numeric($amount)) {
-        return $amount;
-    }
-    
-    $amount = intval($amount);
-    
-    if ($amount >= 100000000) {
-        return number_format($amount / 100000000, 1) . '億円';
-    } elseif ($amount >= 10000000) {
-        return number_format($amount / 10000000, 0) . '千万円';
-    } elseif ($amount >= 10000) {
-        return number_format($amount / 10000, 0) . '万円';
-    } else {
-        return number_format($amount) . '円';
-    }
-}
-
-/**
- * ステータスクラス取得
- */
-function gi_get_status_classes($status) {
-    $classes = array();
-    
-    switch ($status) {
-        case 'open':
-            $classes = array(
-                'bg' => 'bg-green-100 dark:bg-green-900/30',
-                'text' => 'text-green-700 dark:text-green-400',
-                'border' => 'border-green-300 dark:border-green-700',
-                'animate' => 'animate-pulse'
-            );
-            break;
-        case 'upcoming':
-            $classes = array(
-                'bg' => 'bg-yellow-100 dark:bg-yellow-900/30',
-                'text' => 'text-yellow-700 dark:text-yellow-400',
-                'border' => 'border-yellow-300 dark:border-yellow-700',
-                'animate' => ''
-            );
-            break;
-        case 'closed':
-            $classes = array(
-                'bg' => 'bg-gray-100 dark:bg-gray-700',
-                'text' => 'text-gray-700 dark:text-gray-400',
-                'border' => 'border-gray-300 dark:border-gray-600',
-                'animate' => ''
-            );
-            break;
-        default:
-            $classes = array(
-                'bg' => 'bg-gray-100 dark:bg-gray-700',
-                'text' => 'text-gray-700 dark:text-gray-400',
-                'border' => 'border-gray-300 dark:border-gray-600',
-                'animate' => ''
-            );
-    }
-    
-    return $classes;
-}
-
-/**
- * 採択率カラー取得
- */
-function gi_get_success_rate_color($rate) {
-    if ($rate >= 70) {
-        return 'text-green-600 dark:text-green-400';
-    } elseif ($rate >= 50) {
-        return 'text-yellow-600 dark:text-yellow-400';
-    } else {
-        return 'text-red-600 dark:text-red-400';
-    }
-}
-
-/**
- * 難易度表示取得
- */
-function gi_get_difficulty_display($difficulty) {
-    switch ($difficulty) {
-        case 'easy':
-            return '<span class="text-green-600 dark:text-green-400">★☆☆ 簡単</span>';
-        case 'normal':
-            return '<span class="text-yellow-600 dark:text-yellow-400">★★☆ 普通</span>';
-        case 'hard':
-            return '<span class="text-red-600 dark:text-red-400">★★★ 難しい</span>';
-        default:
-            return '<span class="text-gray-400 dark:text-gray-600">-</span>';
-    }
-}
-
-/**
- * 締切までの日数計算
- */
-function gi_calculate_days_until_deadline($deadline_date) {
-    if (empty($deadline_date)) {
-        return null;
-    }
-    
-    $deadline = new DateTime($deadline_date);
-    $today = new DateTime();
-    $interval = $today->diff($deadline);
-    
-    if ($deadline < $today) {
-        return -1; // 締切済み
-    }
-    
-    return $interval->days;
-}
-
-/**
- * ページネーション生成（究極版）
- */
-function gi_generate_pagination_ultimate($total_pages, $current_page) {
-    if ($total_pages <= 1) {
-        return '';
-    }
-    
-    ob_start();
-    ?>
-    <div class="pagination-container flex items-center justify-center space-x-2 mt-8">
-        <?php if ($current_page > 1): ?>
-            <button class="pagination-btn pagination-prev px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300" data-page="<?php echo $current_page - 1; ?>">
-                <i class="fas fa-chevron-left mr-2"></i>前へ
-            </button>
-        <?php endif; ?>
-        
-        <div class="pagination-numbers flex space-x-1">
-            <?php
-            $start = max(1, $current_page - 2);
-            $end = min($total_pages, $current_page + 2);
-            
-            if ($start > 1):
-            ?>
-                <button class="pagination-btn px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700" data-page="1">1</button>
-                <?php if ($start > 2): ?>
-                    <span class="px-2 text-gray-500">...</span>
-                <?php endif; ?>
-            <?php endif; ?>
-            
-            <?php for ($i = $start; $i <= $end; $i++): ?>
-                <button class="pagination-btn px-3 py-2 <?php echo ($i === $current_page) ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'; ?> border border-gray-300 dark:border-gray-600 rounded-lg transition-colors" data-page="<?php echo $i; ?>">
-                    <?php echo $i; ?>
-                </button>
-            <?php endfor; ?>
-            
-            <?php if ($end < $total_pages): ?>
-                <?php if ($end < $total_pages - 1): ?>
-                    <span class="px-2 text-gray-500">...</span>
-                <?php endif; ?>
-                <button class="pagination-btn px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700" data-page="<?php echo $total_pages; ?>"><?php echo $total_pages; ?></button>
-            <?php endif; ?>
-        </div>
-        
-        <?php if ($current_page < $total_pages): ?>
-            <button class="pagination-btn pagination-next px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300" data-page="<?php echo $current_page + 1; ?>">
-                次へ<i class="fas fa-chevron-right ml-2"></i>
-            </button>
-        <?php endif; ?>
-    </div>
-    <?php
-    return ob_get_clean();
-}
-
-/**
- * デバッグ関数
- */
-function gi_ajax_debug() {
-    if (!defined('WP_DEBUG') || !WP_DEBUG) {
-        wp_send_json_error('Debug mode is not enabled');
-    }
-    
-    $info = array(
-        'php_version' => PHP_VERSION,
-        'wp_version' => get_bloginfo('version'),
-        'theme_version' => wp_get_theme()->get('Version'),
-        'memory_limit' => ini_get('memory_limit'),
-        'max_execution_time' => ini_get('max_execution_time'),
-        'post_types' => get_post_types(array('public' => true)),
-        'taxonomies' => get_taxonomies(array('public' => true)),
-        'grant_count' => wp_count_posts('grant'),
-        'active_plugins' => get_option('active_plugins'),
-        'ajax_functions' => array(
-            'gi_load_grants' => function_exists('gi_ajax_load_grants_ultimate'),
-            'gi_toggle_favorite' => function_exists('gi_ajax_toggle_favorite_ultimate'),
-            'gi_get_related_grants' => function_exists('gi_ajax_get_related_grants_ultimate'),
-            'gi_get_statistics' => function_exists('gi_ajax_get_statistics_ultimate'),
-            'gi_search_suggest' => function_exists('gi_ajax_search_suggest'),
-            'gi_compare_grants' => function_exists('gi_ajax_compare_grants'),
-            'gi_export_grants' => function_exists('gi_ajax_export_grants')
-        )
-    );
-    
-    wp_send_json_success($info);
-}
-add_action('wp_ajax_gi_debug', 'gi_ajax_debug');
-add_action('wp_ajax_nopriv_gi_debug', 'gi_ajax_debug');
-
-// ファイル終了
-?>
+    console.log('✅ 統合検索システム 準備完了');
+});
