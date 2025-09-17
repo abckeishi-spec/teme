@@ -1604,112 +1604,42 @@ function gi_remove_query_strings($src) {
 }
 
 // =============================================================================
-// MISSING HELPER FUNCTIONS FOR UNIFIED SEARCH SYSTEM
+// ADDITIONAL HELPER FUNCTIONS FOR UNIFIED SEARCH SYSTEM
 // =============================================================================
-
-/**
- * 安全なメタデータ取得
- */
-function gi_safe_get_meta($post_id, $key, $default = '') {
-    $value = get_post_meta($post_id, $key, true);
-    return !empty($value) ? $value : $default;
-}
-
-/**
- * ステータスをUI用に変換
- */
-function gi_map_application_status_ui($status) {
-    $map = array(
-        'open' => '募集中',
-        'active' => '募集中',
-        'upcoming' => '準備中',
-        'closed' => '終了',
-        'preparing' => '準備中',
-        'ended' => '終了'
-    );
-    return isset($map[$status]) ? $map[$status] : $status;
-}
-
-/**
- * 締切日のフォーマット
- */
-function gi_get_formatted_deadline($post_id) {
-    $deadline = get_post_meta($post_id, 'deadline_date', true);
-    
-    if (empty($deadline)) {
-        return '随時';
-    }
-    
-    // 日付形式の処理
-    if (is_numeric($deadline)) {
-        // UNIXタイムスタンプの場合
-        $deadline_time = intval($deadline);
-    } else {
-        // 文字列の場合
-        $deadline_time = strtotime($deadline);
-    }
-    
-    if ($deadline_time === false) {
-        return $deadline; // パースできない場合はそのまま返す
-    }
-    
-    $current_time = current_time('timestamp');
-    
-    if ($deadline_time < $current_time) {
-        return '終了';
-    }
-    
-    return date('Y年n月j日', $deadline_time);
-}
-
-/**
- * 金額フォーマット（単位付き）
- */
-function gi_format_amount_with_unit($amount) {
-    if (!is_numeric($amount)) {
-        return $amount;
-    }
-    
-    $amount = intval($amount);
-    
-    if ($amount >= 100000000) {
-        return number_format($amount / 100000000, 1) . '億円';
-    } elseif ($amount >= 10000000) {
-        return number_format($amount / 10000000, 0) . '千万円';
-    } elseif ($amount >= 10000) {
-        return number_format($amount / 10000, 0) . '万円';
-    } else {
-        return number_format($amount) . '円';
-    }
-}
 
 /**
  * 投稿ビュー数取得
  */
-function gi_get_post_views($post_id) {
-    $views = get_post_meta($post_id, 'grant_views', true);
-    return intval($views);
+if (!function_exists('gi_get_post_views')) {
+    function gi_get_post_views($post_id) {
+        $views = get_post_meta($post_id, 'grant_views', true);
+        return intval($views);
+    }
 }
 
 /**
  * 投稿ビュー数カウント
  */
-function gi_set_post_views($post_id) {
-    $key = 'grant_views';
-    $count = get_post_meta($post_id, $key, true);
-    $count = empty($count) ? 1 : ($count + 1);
-    update_post_meta($post_id, $key, $count);
+if (!function_exists('gi_set_post_views')) {
+    function gi_set_post_views($post_id) {
+        $key = 'grant_views';
+        $count = get_post_meta($post_id, $key, true);
+        $count = empty($count) ? 1 : ($count + 1);
+        update_post_meta($post_id, $key, $count);
+    }
 }
 
 /**
  * 助成金の詳細表示でビューカウント
  */
-function gi_track_grant_views() {
-    if (is_singular('grant')) {
-        gi_set_post_views(get_the_ID());
+if (!function_exists('gi_track_grant_views')) {
+    function gi_track_grant_views() {
+        if (is_singular('grant')) {
+            gi_set_post_views(get_the_ID());
+        }
     }
+    add_action('wp_head', 'gi_track_grant_views');
 }
-add_action('wp_head', 'gi_track_grant_views');
 
 // デバッグ用
 if (WP_DEBUG) {
